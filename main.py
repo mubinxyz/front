@@ -1,17 +1,9 @@
-# main.py
-import pandas as pd
-import plotly.express as px
-from utils import multiply, create_sequence
+import arrr
+from pyscript import document
 
-# Generate data
-x_values = create_sequence(1, 5)
-y_values = [multiply(n, 10) for n in x_values]
 
-# Create DataFrame
-df = pd.DataFrame({"x": x_values, "y": y_values})
-
-# Plot chart
-fig = px.line(df, x="x", y="y", title="Pyodide Multi-file Chart Example")
-
-# Save chart HTML
-fig.write_html("/plot.html")
+def translate_english(event):
+    input_text = document.querySelector("#english")
+    english = input_text.value
+    output_div = document.querySelector("#output")
+    output_div.innerText = arrr.translate(english)

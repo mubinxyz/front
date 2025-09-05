@@ -75,15 +75,16 @@
   </div>
 
   <!-- ---------- Embedded chart.py source (unchanged) ---------- -->
-  <script id="chart-src" type="text/plain">
+<script id="chart-src" type="text/plain">
 # Embedded chart_service-like module adapted for Pyodide (Agg backend)
-# Produces high-dpi PNGs (dpi=300), returns Blob URLs to JS. JS will stack images client-side
+# Produces PNGs; responsive/mobile optimizations: smaller fonts, legend repositioning, rotated x-ticks,
+# lower dpi on narrow viewports, quarter labels positioned between quarter boundary lines.
 try:
     import js
     globals()['window'] = js.window
     globals()['document'] = js.document
 except Exception:
-    pass
+    js = None
 
 import io
 import time
@@ -140,32 +141,121 @@ QUARTER_COLORS = ["C2","C3","C4","C5"]
 TRUEOPEN_COLOR = "C6"
 TRUEOPEN_STYLE = "--"
 
-# Helpers (same as previous)
+# ---------- helpers ----------
+def tf_to_seconds(tf: str) -> int:
+    if isinstance(tf, str) and tf.upper() == "D":
+        return 86400
+    try:
+        return int(tf) * 60
+    except Exception:
+        return 60
 
-def _parse_datetimes_to_utc(series: pd.Series, source_tz=SOURCE_TZ) -> pd.Series:
-    if pd.api.types.is_integer_dtype(series) or pd.api.types.is_float_dtype(series):
-        try:
-            non_na = series.dropna()
-            maxv = int(non_na.max()) if not non_na.empty else 0
-        except Exception:
-            maxv = 0
-        unit = "ms" if maxv > 10**12 else "s"
-        s = pd.to_datetime(series, unit=unit, errors='coerce')
-        try:
-            return s.dt.tz_localize(source_tz).dt.tz_convert("UTC")
-        except Exception:
-            fallback = dateutil_tz.tzoffset(None, LOCAL_OFFSET_MINUTES * 60)
-            return s.dt.tz_localize(fallback).dt.tz_convert("UTC")
-    s = pd.to_datetime(series, errors='coerce')
-    if s.dt.tz is None:
-        try:
-            return s.dt.tz_localize(source_tz).dt.tz_convert("UTC")
-        except Exception:
-            fallback = dateutil_tz.tzoffset(None, LOCAL_OFFSET_MINUTES * 60)
-            return s.dt.tz_localize(fallback).dt.tz_convert("UTC")
-    else:
-        return s.dt.tz_convert("UTC")
+def to_unix_timestamp(value, assume_tz: str | None = "Asia/Qatar") -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        iv = int(value)
+        if iv > 1_000_000_000_000:
+            return iv // 1000
+        return iv
+    if isinstance(value, (pd.Timestamp, dt.datetime)):
+        ts = pd.to_datetime(value)
+        if ts.tz is None:
+            ts = ts.tz_localize(assume_tz if assume_tz else "UTC")
+        ts = ts.tz_convert("UTC")
+        return int(ts.timestamp())
+    if isinstance(value, str):
+        ts = pd.to_datetime(value, errors="raise")
+        if ts.tz is None:
+            ts = ts.tz_localize(assume_tz if assume_tz else "UTC")
+        ts = ts.tz_convert("UTC")
+        return int(ts.timestamp())
+    raise TypeError(f"Unsupported type for timestamp conversion: {type(value)}")
 
+def normalize_ohlc(ohlc_data: dict, return_tz_offset_minutes: int = 210) -> pd.DataFrame:
+    if not ohlc_data:
+        return pd.DataFrame()
+
+    t_list = list(ohlc_data.get("t", []))
+    if max(t_list or [0]) > 1_000_000_000_000:
+        t_list = [int(x) // 1000 if (x is not None and pd.notna(x)) else None for x in t_list]
+
+    target_tz = dt.timezone(dt.timedelta(minutes=return_tz_offset_minutes))
+    datetimes = []
+    for ts in t_list:
+        try:
+            if ts:
+                dt_utc = dt.datetime.fromtimestamp(int(ts), tz=dt.timezone.utc)
+                datetimes.append(dt_utc.astimezone(target_tz))
+            else:
+                datetimes.append(pd.NaT)
+        except Exception:
+            datetimes.append(pd.NaT)
+
+    df = pd.DataFrame({
+        "Date": pd.DatetimeIndex(datetimes),
+        "Open": pd.to_numeric(ohlc_data.get("o", []), errors="coerce"),
+        "High": pd.to_numeric(ohlc_data.get("h", []), errors="coerce"),
+        "Low": pd.to_numeric(ohlc_data.get("l", []), errors="coerce"),
+        "Close": pd.to_numeric(ohlc_data.get("c", []), errors="coerce"),
+        "Volume": pd.to_numeric(ohlc_data.get("v", []), errors="coerce") if "v" in ohlc_data else 0,
+    })
+
+    df.sort_values("Date", inplace=True)
+    df.reset_index(drop=True, inplace=True)
+    try:
+        df["Date"] = df["Date"].dt.tz_localize(None)
+    except Exception:
+        pass
+    return df
+
+# fetch via browser JS (requires CORS on that endpoint)
+async def get_ohlc(symbol: str, timeframe: str, input_tz: str | None = "Asia/Qatar") -> pd.DataFrame:
+    try:
+        now = int(time.time())
+        candle_sec = tf_to_seconds(timeframe)
+        from_unix = max(0, now - candle_sec * 10_000)
+        to_unix = now
+
+        url = (
+            "https://my.litefinance.org/chart/get-history"
+            f"?symbol={symbol.upper()}&resolution={timeframe}&from={from_unix}&to={to_unix}"
+        )
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Referer": "https://my.litefinance.org/",
+            "X-Requested-With": "XMLHttpRequest",
+        }
+        if js is None:
+            return pd.DataFrame()
+        resp = await js.fetch(url, {"method": "GET", "headers": headers})
+        if not getattr(resp, "ok", False):
+            return pd.DataFrame()
+        data_js = await resp.json()
+        try:
+            data = data_js.to_py()
+        except Exception:
+            try:
+                txt = await data_js.text()
+                import json
+                data = json.loads(txt) if txt else {}
+            except Exception:
+                data = {}
+        ohlc_data = data.get("data", {}) if isinstance(data, dict) else {}
+        if ohlc_data:
+            return normalize_ohlc(ohlc_data, return_tz_offset_minutes=3 * 60 + 30)
+    except Exception:
+        pass
+    return pd.DataFrame()
+
+# ---------- internal helpers for quarter boundaries etc (unchanged) ----------
+def _get_main_ax_from_mpf_axes(axes):
+    if isinstance(axes, (list, tuple)):
+        return axes[0]
+    if isinstance(axes, dict):
+        return axes.get("main", next(iter(axes.values())))
+    return axes
 
 def _quarter_boundaries_utc_for_index(index: pd.DatetimeIndex, local_offset_minutes: int = LOCAL_OFFSET_MINUTES, tz_name: str = LOCAL_TZ_NAME):
     if index is None or index.empty:
@@ -203,7 +293,6 @@ def _quarter_boundaries_utc_for_index(index: pd.DatetimeIndex, local_offset_minu
     boundaries_utc = sorted(list(dict.fromkeys(boundaries_utc)))
     return boundaries_utc
 
-
 def _five_minute_boundaries_utc_for_index(index: pd.DatetimeIndex, local_offset_minutes: int = LOCAL_OFFSET_MINUTES, tz_name: str = LOCAL_TZ_NAME):
     if index is None or index.empty:
         return []
@@ -235,15 +324,6 @@ def _five_minute_boundaries_utc_for_index(index: pd.DatetimeIndex, local_offset_
             boundaries_utc.append(pd.Timestamp(ts).tz_localize(dateutil_tz.gettz(tz_name)).tz_convert("UTC"))
     boundaries_utc = sorted(list(dict.fromkeys(boundaries_utc)))
     return boundaries_utc
-
-
-def _get_main_ax_from_mpf_axes(axes):
-    if isinstance(axes, (list, tuple)):
-        return axes[0]
-    if isinstance(axes, dict):
-        return axes.get("main", next(iter(axes.values())))
-    return axes
-
 
 def _quarter_index_from_boundary(boundary_utc: pd.Timestamp, tz_name: str = LOCAL_TZ_NAME, timeframe: int = 15) -> int:
     if boundary_utc is None:
@@ -289,7 +369,7 @@ def _quarter_index_from_boundary(boundary_utc: pd.Timestamp, tz_name: str = LOCA
     except Exception:
         return 0
 
-# Main plotting: returns list of Blob URLs (JS) for individual charts and combined last image when possible
+# ---------- main plot function (responsive/mobile optimized) ----------
 async def plot_from_csv_many(jobs, plot_w_px, plot_h_px):
     try:
         jobs = jobs.to_py()
@@ -299,9 +379,31 @@ async def plot_from_csv_many(jobs, plot_w_px, plot_h_px):
     mpf = await _ensure_mplfinance()
     pillow_ok = await _ensure_pillow()
 
-    dpi = 300  # higher dpi for clearer images
+    # choose dpi adaptively: lower dpi for very small widths (keeps image aspect and file size reasonable)
+    try:
+        if plot_w_px <= 360:
+            dpi = 160
+        elif plot_w_px <= 480:
+            dpi = 200
+        else:
+            dpi = 300
+    except Exception:
+        dpi = 300
+
     fig_w = max(3.5, float(plot_w_px) / 96.0)
-    fig_h = max(2.5, float(plot_h_px) / 96.0)
+    fig_h = max(2.4, float(plot_h_px) / 96.0)
+
+    # responsive font sizing
+    try:
+        scale = float(plot_w_px) / 800.0
+        if scale < 0.45: scale = 0.45
+        if scale > 1.3: scale = 1.3
+        TITLE_FS = max(10, int(14 * scale))
+        LEGEND_FS = max(6, int(10 * scale))
+        QUARTER_FS = max(6, int(9 * scale))
+        TICK_FS = max(7, int(9 * scale))
+    except Exception:
+        TITLE_FS = 12; LEGEND_FS = 9; QUARTER_FS = 8; TICK_FS = 9
 
     chart_buffers = []
     for job in jobs:
@@ -309,15 +411,29 @@ async def plot_from_csv_many(jobs, plot_w_px, plot_h_px):
         symbol = job.get('symbol','') if isinstance(job, dict) else job.get('symbol','')
         timeframe = int(job.get('timeframe',15)) if isinstance(job, dict) else int(job.get('timeframe',15))
 
-        try:
-            df = pd.read_csv(io.StringIO(csv_text))
-            df.columns = [c.strip() for c in df.columns]
-        except Exception:
-            df = pd.DataFrame()
+        df = pd.DataFrame()
+        # if no CSV provided, try get_ohlc directly (browser)
+        if not csv_text:
+            try:
+                df = await get_ohlc(symbol or '', str(timeframe))
+            except Exception:
+                df = pd.DataFrame()
+            try:
+                if not df.empty:
+                    csv_text = df.to_csv(index=False)
+            except Exception:
+                csv_text = ''
+
+        if csv_text:
+            try:
+                df = pd.read_csv(io.StringIO(csv_text))
+                df.columns = [c.strip() for c in df.columns]
+            except Exception:
+                df = pd.DataFrame()
 
         if df.empty or not {'Open','High','Low','Close'}.issubset(df.columns):
             fig = plt.figure(figsize=(fig_w, fig_h))
-            plt.text(0.5,0.5,'No usable OHLC data', ha='center', va='center')
+            plt.text(0.5,0.5,'No usable OHLC data', ha='center', va='center', fontsize=TITLE_FS)
             plt.axis('off')
             b = io.BytesIO(); fig.savefig(b, format='png', dpi=dpi, bbox_inches='tight'); b.seek(0)
             try: plt.close(fig)
@@ -325,28 +441,28 @@ async def plot_from_csv_many(jobs, plot_w_px, plot_h_px):
             chart_buffers.append(b)
             continue
 
-        # normalize
+        # normalize DataFrame index
         if 'Date' in df.columns:
             df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
             df.set_index('Date', inplace=True)
         elif 'datetime' in df.columns:
-            df['datetime'] = _parse_datetimes_to_utc(df['datetime'], source_tz=SOURCE_TZ)
-            df = df.dropna(subset=['datetime'])
-            df.set_index('datetime', inplace=True)
+            # fallback: attempt robust parsing (reuses earlier helper)
+            try:
+                df['datetime'] = pd.to_datetime(df['datetime'], errors='coerce')
+                df.set_index('datetime', inplace=True)
+            except Exception:
+                pass
         else:
             if isinstance(df.index, pd.DatetimeIndex):
-                df.index = _parse_datetimes_to_utc(pd.Series(df.index), source_tz=SOURCE_TZ)
-                df.index = pd.DatetimeIndex(df.index)
-                if df.index.tz is None:
-                    df.index = df.index.tz_localize('UTC')
-                else:
-                    df.index = df.index.tz_convert('UTC')
+                try:
+                    df.index = pd.to_datetime(df.index, errors='coerce')
+                except Exception:
+                    pass
 
         for c in ['Open','High','Low','Close','Volume']:
             if c in df.columns:
                 df[c] = pd.to_numeric(df[c], errors='coerce')
 
-        # Ensure tz-aware index
         try:
             if df.index.tz is None:
                 try:
@@ -361,8 +477,7 @@ async def plot_from_csv_many(jobs, plot_w_px, plot_h_px):
             except Exception:
                 pass
 
-        # limit rows to match chart_service time window
-        to_date = int(time.time())
+        # limit rows for performance
         if timeframe == 5:
             seconds_range = 0.3 * 24 * 60 * 60
         elif timeframe == 15:
@@ -382,7 +497,7 @@ async def plot_from_csv_many(jobs, plot_w_px, plot_h_px):
 
         if df.empty or not {'Open','High','Low','Close'}.issubset(df.columns):
             fig = plt.figure(figsize=(fig_w, fig_h))
-            plt.text(0.5,0.5,'No usable OHLC data', ha='center', va='center')
+            plt.text(0.5,0.5,'No usable OHLC data', ha='center', va='center', fontsize=TITLE_FS)
             plt.axis('off')
             b = io.BytesIO(); fig.savefig(b, format='png', dpi=dpi, bbox_inches='tight'); b.seek(0)
             try: plt.close(fig)
@@ -390,7 +505,7 @@ async def plot_from_csv_many(jobs, plot_w_px, plot_h_px):
             chart_buffers.append(b)
             continue
 
-        # boundaries and plotting
+        # compute boundaries
         if timeframe == 5:
             boundaries = _five_minute_boundaries_utc_for_index(df.index)
         else:
@@ -410,16 +525,28 @@ async def plot_from_csv_many(jobs, plot_w_px, plot_h_px):
 
         filtered_boundaries = [b for b in boundaries if (b >= (idx_min - tol) and b <= (idx_max + tol))]
 
+        # create base figure
         try:
             fig, axes = mpf.plot(df, type='candle', style='yahoo', ylabel='Price', figsize=(fig_w, fig_h), volume=False, returnfig=True)
         except Exception:
             fig, ax = plt.subplots(figsize=(fig_w, fig_h))
-            ax.text(0.5,0.5,'mplfinance failed', ha='center')
+            ax.text(0.5,0.5,'mplfinance failed', ha='center', fontsize=TITLE_FS)
             axes = ax
 
         main_ax = _get_main_ax_from_mpf_axes(axes)
 
-        # same annotation logic (quarters, HLs, true-open, labels)
+        # adaptive tick label sizing and rotation for narrow screens
+        try:
+            main_ax.tick_params(axis='both', which='major', labelsize=TICK_FS)
+            main_ax.yaxis.label.set_size(TICK_FS)
+            if plot_w_px < 420:
+                for label in main_ax.get_xticklabels():
+                    label.set_rotation(45)
+                    label.set_ha('right')
+        except Exception:
+            pass
+
+        # find candle rectangle centers for alignment
         import matplotlib.patches as mpatches
         rects = []
         for child in main_ax.get_children():
@@ -440,12 +567,10 @@ async def plot_from_csv_many(jobs, plot_w_px, plot_h_px):
         for b in filtered_boundaries:
             try:
                 pos = df.index.get_indexer([pd.Timestamp(b)], method='nearest')[0]
-                if pos == -1:
-                    continue
+                if pos == -1: continue
                 nearest_ts = df.index[pos]
                 delta = abs((nearest_ts - b).total_seconds())
-                if delta > tol.total_seconds():
-                    continue
+                if delta > tol.total_seconds(): continue
                 if used_x_centers and pos < len(used_x_centers):
                     x_coords_for_boundaries.append(used_x_centers[pos])
                 else:
@@ -454,12 +579,14 @@ async def plot_from_csv_many(jobs, plot_w_px, plot_h_px):
             except Exception:
                 continue
 
+        # draw quarter vlines
         for xcoord in x_coords_for_boundaries:
             try:
-                main_ax.axvline(x=xcoord, linestyle='--', linewidth=1.2, alpha=0.95, color='C1', zorder=1)
+                main_ax.axvline(x=xcoord, linestyle='--', linewidth=1.0, alpha=0.9, color='C1', zorder=1)
             except Exception:
                 pass
 
+        # helper to find columns robustly
         def _col_choice(df_obj, *candidates):
             for c in candidates:
                 if c in df_obj.columns:
@@ -625,128 +752,95 @@ async def plot_from_csv_many(jobs, plot_w_px, plot_h_px):
                 pass
 
         try:
-            if len(interval_open_ts) > 0 and last_minus_one_x is not None:
-                candidate_interval_idx = len(interval_open_ts) - 1
-                q_candidate = None
-                if candidate_interval_idx < len(boundary_quarter_idx):
-                    q_candidate = boundary_quarter_idx[candidate_interval_idx]
-                else:
+            # Place quarter labels between the vlines: choose y transform so they sit on top of plot area but not overlay candles.
+            mids = []
+            if len(x_coords_for_boundaries) >= 2:
+                for i in range(len(x_coords_for_boundaries) - 1):
+                    a = x_coords_for_boundaries[i]
+                    b = x_coords_for_boundaries[i + 1]
                     try:
-                        candidate_ts = interval_open_ts[candidate_interval_idx]
-                        if candidate_ts is not None:
-                            q_candidate = _quarter_index_from_boundary(candidate_ts, tz_name=LOCAL_TZ_NAME, timeframe=timeframe)
+                        mids.append((float(a) + float(b)) / 2.0)
                     except Exception:
-                        q_candidate = None
-                if q_candidate == 1:
-                    open_ts = interval_open_ts[candidate_interval_idx]
-                    open_price = None; xstart = None
-                    if open_ts is not None:
                         try:
-                            pos_open = df.index.get_indexer([pd.Timestamp(open_ts)], method='nearest')[0]
-                            if pos_open != -1 and pos_open < len(df):
-                                open_price = df.iloc[pos_open][open_col]
-                                xstart = (used_x_centers[pos_open] if (used_x_centers and pos_open < len(used_x_centers)) else float(pos_open))
+                            mids.append((a + b) / 2.0)
                         except Exception:
-                            open_price=None; xstart=None
-                    if (open_price is None or xstart is None) and candidate_interval_idx < len(good_boundaries):
-                        try:
-                            pos_left = df.index.get_indexer([pd.Timestamp(good_boundaries[candidate_interval_idx])], method='nearest')[0]
-                            if pos_left != -1 and pos_left < len(df):
-                                open_price = df.iloc[pos_left][open_col]
-                                xstart = (used_x_centers[pos_left] if (used_x_centers and pos_left < len(used_x_centers)) else float(pos_left))
-                        except Exception:
-                            pass
-                    if open_price is not None and xstart is not None:
-                        try:
-                            main_ax.hlines(y=float(open_price), xmin=xstart, xmax=last_minus_one_x, linewidth=1.0, colors=TRUEOPEN_COLOR, linestyle=TRUEOPEN_STYLE, alpha=0.95, zorder=2)
-                        except Exception:
-                            pass
+                            continue
+            y_text_coord = 0.96 if plot_w_px >= 420 else 0.88
+            for idx_mid, xmid in enumerate(mids):
+                try:
+                    if (idx_mid + 1) < len(boundary_quarter_idx):
+                        q_idx = boundary_quarter_idx[idx_mid + 1]
+                    elif idx_mid < len(boundary_quarter_idx):
+                        q_idx = boundary_quarter_idx[idx_mid]
+                    else:
+                        q_idx = idx_mid % 4
+                    label = f"Q{(q_idx % 4) + 1}"
+                    main_ax.text(xmid, y_text_coord, label,
+                                 transform=main_ax.get_xaxis_transform(),
+                                 ha='center', va='bottom',
+                                 fontsize=QUARTER_FS, color=QUARTER_COLORS[q_idx % len(QUARTER_COLORS)],
+                                 bbox=dict(facecolor='white', alpha=0.85 if plot_w_px>=420 else 0.65, edgecolor='none', pad=0.2),
+                                 zorder=6, clip_on=False)
+                except Exception:
+                    continue
         except Exception:
             pass
 
-        # --- add quarter labels (between quarter lines) and legend ---
+        # Legend: put it outside on wide screens, below on medium, hide on very narrow.
         import matplotlib.lines as mlines
         try:
-            # Reserve a little top space so labels + legend don't clip
-            try:
-                y_min, y_max = main_ax.get_ylim()
-                top_margin = 0.92
+            boundary_line = mlines.Line2D([], [], color='C1', linestyle='--', linewidth=1.0, label='Quarter boundary')
+            hl_line = mlines.Line2D([], [], color='C2', linestyle='-', linewidth=1.0, label='Interval HL/LL')
+            trueopen_line = mlines.Line2D([], [], color=TRUEOPEN_COLOR, linestyle=TRUEOPEN_STYLE, linewidth=1.0, label='True Open')
+
+            if plot_w_px >= 560:
+                main_ax.legend(handles=[boundary_line, hl_line, trueopen_line],
+                               loc='upper right', framealpha=0.9, fontsize=LEGEND_FS, ncol=1, handlelength=1.2)
+            elif plot_w_px >= 420:
+                # small legend below the plot, compact 3-column
+                main_ax.legend(handles=[boundary_line, hl_line, trueopen_line],
+                               loc='upper center', bbox_to_anchor=(0.5, -0.14), framealpha=0.9,
+                               fontsize=max(6, int(LEGEND_FS*0.9)), ncol=3, handlelength=0.9)
+            else:
+                # hide legend on very narrow screens
                 try:
-                    fig.subplots_adjust(top=top_margin, bottom=0.08, left=0.05, right=0.95)
+                    if getattr(main_ax, 'legend_', None):
+                        main_ax.legend_.remove()
                 except Exception:
                     pass
-            except Exception:
-                y_min, y_max = None, None
-
-            # Quarter labels: place label at midpoint between consecutive quarter vlines
-            try:
-                mids = []
-                if len(x_coords_for_boundaries) >= 2:
-                    for i in range(len(x_coords_for_boundaries) - 1):
-                        a = x_coords_for_boundaries[i]
-                        b = x_coords_for_boundaries[i + 1]
-                        try:
-                            mids.append((float(a) + float(b)) / 2.0)
-                        except Exception:
-                            try:
-                                mids.append((a + b) / 2.0)
-                            except Exception:
-                                continue
-                # draw labels for each midpoint; choose quarter index from boundary_quarter_idx for the interval
-                for idx_mid, xmid in enumerate(mids):
-                    try:
-                        # map to interval quarter index: prefer boundary_quarter_idx[idx_mid+1] if exists, else idx_mid
-                        if (idx_mid + 1) < len(boundary_quarter_idx):
-                            q_idx = boundary_quarter_idx[idx_mid + 1]
-                        elif idx_mid < len(boundary_quarter_idx):
-                            q_idx = boundary_quarter_idx[idx_mid]
-                        else:
-                            q_idx = idx_mid % 4
-                        label = f"Q{(q_idx % 4) + 1}"
-                        main_ax.text(xmid, 0.96, label,
-                                     transform=main_ax.get_xaxis_transform(),
-                                     ha='center', va='bottom',
-                                     fontsize=8, color=QUARTER_COLORS[q_idx % len(QUARTER_COLORS)],
-                                     bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'),
-                                     zorder=6, clip_on=False)
-                    except Exception:
-                        continue
-            except Exception:
-                pass
-
-            # Legend: representative handles for quarter boundaries, HL/LL, and true-open lines.
-            try:
-                boundary_line = mlines.Line2D([], [], color='C1', linestyle='--', linewidth=1.2, label='Quarter boundary')
-                hl_line = mlines.Line2D([], [], color='C2', linestyle='-', linewidth=1.0, label='Interval HL/LL')
-                trueopen_line = mlines.Line2D([], [], color=TRUEOPEN_COLOR, linestyle=TRUEOPEN_STYLE, linewidth=1.0, label='True Open')
-                main_ax.legend(handles=[boundary_line, hl_line, trueopen_line],
-                               loc='upper right', framealpha=0.9, fontsize=8, ncol=1, handlelength=1.5)
-            except Exception:
-                pass
-
         except Exception:
             pass
-        # --- end quarter labels and legend ---
 
+        # final visual tweaks: margin and grid
         try:
+            # tighten top/bottom depending on width
+            top_margin = 0.94 if plot_w_px >= 560 else (0.92 if plot_w_px >= 420 else 0.88)
+            bottom_margin = 0.12 if plot_w_px >= 420 else 0.18
+            left_margin = 0.05
+            right_margin = 0.95
+            try:
+                fig.subplots_adjust(top=top_margin, bottom=bottom_margin, left=left_margin, right=right_margin)
+            except Exception:
+                pass
             y_min, y_max = main_ax.get_ylim()
             margin = (y_max - y_min) * 0.03
             main_ax.set_ylim(y_min - margin, y_max + margin)
         except Exception:
             pass
-        main_ax.grid(True, linestyle='--', linewidth=0.5, alpha=0.30)
+
+        main_ax.grid(True, linestyle='--', linewidth=0.5, alpha=0.28)
 
         try:
-            main_ax.set_title(f"{(symbol or 'SYMBOL').upper()} - {timeframe}min", fontsize=12, color='gray', pad=14)
+            main_ax.set_title(f"{(symbol or 'SYMBOL').upper()} - {timeframe}min", fontsize=TITLE_FS, color='gray', pad=8 if plot_w_px<420 else 14)
         except Exception:
             try:
-                fig.suptitle(f"{(symbol or 'SYMBOL').upper()} - {timeframe}min", fontsize=12, color='gray', alpha=0.6)
+                fig.suptitle(f"{(symbol or 'SYMBOL').upper()} - {timeframe}min", fontsize=TITLE_FS, color='gray', alpha=0.6)
             except Exception:
                 pass
 
         if fig is not None:
             try:
-                fig.subplots_adjust(top=0.95, bottom=0.08, left=0.05, right=0.95, hspace=0.2, wspace=0.2)
+                fig.subplots_adjust(hspace=0.12, wspace=0.12)
             except Exception:
                 pass
             buf = io.BytesIO()
@@ -759,7 +853,7 @@ async def plot_from_csv_many(jobs, plot_w_px, plot_h_px):
         except Exception:
             pass
 
-    # Try Pillow stacking server-side (Pyodide). If available, append combined image as last buf.
+    # final: server-side stacking (Pillow) if available
     combined_buf = None
     try:
         if pillow_ok and chart_buffers:
@@ -775,7 +869,6 @@ async def plot_from_csv_many(jobs, plot_w_px, plot_h_px):
                 pad = 8
                 max_w = max(img.width for img in pil_imgs)
                 total_h = sum(img.height for img in pil_imgs) + pad * (len(pil_imgs) - 1)
-                # scale combined image to fit plot width if necessary
                 target_w = int(plot_w_px)
                 scale = 1.0
                 if max_w > target_w and target_w > 0:
@@ -794,7 +887,7 @@ async def plot_from_csv_many(jobs, plot_w_px, plot_h_px):
     except Exception:
         combined_buf = None
 
-    # Create JS Blob URLs for all buffers and return list of URLs
+    # create JS blob URLs
     urls = []
     try:
         for b in chart_buffers:
@@ -810,8 +903,9 @@ async def plot_from_csv_many(jobs, plot_w_px, plot_h_px):
 
     return urls
 
-# Expose
+# Expose to JS
 globals()['plot_from_csv_many'] = plot_from_csv_many
+globals()['get_ohlc'] = get_ohlc
 </script>
 
 

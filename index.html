@@ -1,21 +1,143 @@
 <!doctype html>
 <html>
-  <head>
-      <script src="https://cdn.jsdelivr.net/pyodide/v0.28.2/full/pyodide.js"></script>
-  </head>
-  <body>
-    Pyodide test page <br>
-    Open your browser console to see Pyodide output
-    <script type="text/javascript">
-      async function main(){
-        let pyodide = await loadPyodide();
-        console.log(pyodide.runPython(`
-            import sys
-            sys.version
-        `));
-        pyodide.runPython("print(1 + 2)");
+<head>
+  <meta charset="utf-8" />
+  <title>Pyodide OHLC Plot - tight_layout fix</title>
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
+  <style>
+    #plot { width: 90%; max-width:900px; margin: 16px auto; border: 1px solid #ddd; padding: 8px; min-height:200px; }
+  </style>
+</head>
+<body>
+  <h3>OHLC Plot (Pyodide)</h3>
+  <div id="plot">Loading...</div>
+  <pre id="log" style="white-space:pre-wrap;color:#333;"></pre>
+
+  <script>
+  async function main(){
+    const logEl = document.getElementById('log');
+    const log = msg => { logEl.textContent += msg + "\n"; console.debug(msg); };
+
+    try{
+      // <-- make sure the target div exists for the backend before running Python
+      document.pyodideMplTarget = document.getElementById("plot");
+
+      const pyodide = await loadPyodide();
+      log("Pyodide loaded");
+
+      await pyodide.loadPackage(["pandas", "matplotlib"]);
+      log("Packages loaded: pandas, matplotlib");
+
+      // fetch data (fallback to sample if CORS/fetch fails)
+      const url = "https://my.litefinance.org/chart/get-history?symbol=BTCUSD&resolution=5&from=1733095200&to=1733181600";
+      let dataObj = null;
+      try {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const json = await r.json();
+        dataObj = json.data || null;
+        log("Fetched remote data OK");
+      } catch (e) {
+        log("Fetch failed (possibly CORS) - falling back to sample data. Error: " + e);
+        dataObj = {
+          "t": [1733095200, 1733095500, 1733095800, 1733096100],
+          "o": [56000, 56100, 56050, 56200],
+          "h": [56150, 56250, 56100, 56300],
+          "l": [55950, 56000, 55900, 56150],
+          "c": [56100, 56050, 56175, 56250],
+          "v": [120, 90, 50, 75]
+        };
       }
-      main();
-    </script>
-  </body>
+
+      // pass data as JSON string (avoids JsProxy issues)
+      pyodide.globals.set("ohlc_json", JSON.stringify(dataObj));
+
+      await pyodide.runPythonAsync(`
+import json
+import matplotlib
+# set backend BEFORE importing pyplot
+matplotlib.use("module://matplotlib_pyodide.html5_canvas_backend")
+
+import pandas as pd
+import matplotlib.pyplot as plt
+from datetime import datetime, timezone, timedelta
+
+# load json into native Python dict
+ohlc_data = json.loads(ohlc_json) if ohlc_json is not None else {}
+
+def normalize_ohlc(ohlc_data: dict, return_tz_offset_minutes: int = 210) -> pd.DataFrame:
+    if not ohlc_data:
+        return pd.DataFrame()
+    t_list = list(ohlc_data.get("t", []))
+    if not t_list:
+        return pd.DataFrame()
+    try:
+        max_t = max(x for x in t_list if x is not None)
+    except Exception:
+        max_t = 0
+    if max_t > 1_000_000_000_000:
+        t_list = [int(x)//1000 if x is not None else None for x in t_list]
+
+    target_tz = timezone(timedelta(minutes=return_tz_offset_minutes))
+    datetimes = []
+    for ts in t_list:
+        if ts is None:
+            datetimes.append(pd.NaT)
+            continue
+        dt = datetime.fromtimestamp(int(ts), tz=timezone.utc).astimezone(target_tz)
+        datetimes.append(dt)
+
+    df = pd.DataFrame({
+        "Date": pd.DatetimeIndex(datetimes),
+        "Open": pd.to_numeric(ohlc_data.get("o", []), errors="coerce"),
+        "High": pd.to_numeric(ohlc_data.get("h", []), errors="coerce"),
+        "Low": pd.to_numeric(ohlc_data.get("l", []), errors="coerce"),
+        "Close": pd.to_numeric(ohlc_data.get("c", []), errors="coerce"),
+        "Volume": pd.to_numeric(ohlc_data.get("v", []), errors="coerce") if "v" in ohlc_data else 0,
+    })
+
+    df.sort_values("Date", inplace=True)
+    df.reset_index(drop=True, inplace=True)
+    # remove tz info
+    try:
+        df["Date"] = df["Date"].dt.tz_localize(None)
+    except Exception:
+        pass
+    return df
+
+df = normalize_ohlc(ohlc_data, return_tz_offset_minutes=3*60+30)
+
+if df.empty:
+    print("No data available to plot.")
+else:
+    fig, ax = plt.subplots(figsize=(8,3))
+    ax.plot(df["Date"], df["Close"], marker='o', linestyle='-')
+    ax.set_title("BTCUSD Close Price")
+    ax.set_xlabel("Date")
+    ax.set_ylabel("Close")
+    for label in ax.get_xticklabels():
+        label.set_rotation(30)
+    # safer: set tight layout mode instead of forcing an immediate renderer call
+    fig.set_tight_layout(True)
+
+    # try to call tight_layout(), but guard against renderer not being available
+    try:
+        fig.tight_layout()
+    except Exception as e:
+        print("tight_layout() unavailable right now; continuing. Error:", e)
+
+    plt.show()
+      `);
+
+      log("Python executed; plot should appear (or check log for errors).");
+
+    } catch (err) {
+      console.error(err);
+      document.getElementById('log').textContent += "Fatal error: " + err + "\\n";
+    }
+  }
+
+  main();
+  </script>
+</body>
 </html>

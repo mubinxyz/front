@@ -5,15 +5,55 @@
   <title>OHLC Candles (Pyodide + mplfinance) — fixed</title>
   <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
   <style>
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; padding: 18px; color:#111; }
-    .container { max-width: 980px; margin: 0 auto; }
-    #plot { width: 100%; margin: 12px 0; border: 1px solid #e6e6e6; padding: 10px; min-height:220px; background:#fff; }
-    #controls { display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
-    input, select, button { padding:8px 10px; font-size:14px; border-radius:6px; border:1px solid #ccc; }
-    button { cursor:pointer; background:#0077ff; color:white; border-color:#0062d6; }
-    #log { white-space: pre-wrap; background:#f7f8fb; padding:8px; border-radius:6px; margin-top:8px; color:#333; max-height:200px; overflow:auto; }
-    label{font-size:13px; color:#333;}
-    code { background:#f1f1f1; padding:2px 6px; border-radius:4px; }
+     body {
+      font-family: Arial, sans-serif;
+      margin: 8px;
+      padding: 0;
+      background-color: #f5f5f5;
+      color: #222;
+    }
+
+    h3 {
+      text-align: center;
+      font-size: 1.4rem;
+      margin-bottom: 0.5em;
+    }
+
+    #plot {
+      width: 95%;
+      max-width: 900px;
+      margin: 16px auto;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 8px;
+      min-height: 250px;
+      background-color: #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+
+    #log {
+      width: 95%;
+      max-width: 900px;
+      margin: 8px auto;
+      padding: 8px;
+      background-color: #fff;
+      border-radius: 6px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      font-size: 0.9rem;
+      overflow-wrap: break-word;
+    }
+
+    @media (max-width: 600px) {
+      #plot, #log {
+        width: 100%;
+        min-height: 200px;
+        font-size: 0.85rem;
+      }
+
+      h3 {
+        font-size: 1.2rem;
+      }
+    }
   </style>
 </head>
 <body>

@@ -1,0 +1,39 @@
+# save_data.yml 
+
+name: Save OHLC Data
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # Every 5 minutes
+  workflow_dispatch:         # Manual run
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas requests
+
+      - name: Run script
+        run: python save_data.py
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add csv_data/*.csv
+          git commit -m "Update CSV data [skip ci]" || echo "No changes to commit"
+          git push

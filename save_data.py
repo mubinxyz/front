@@ -1,4 +1,4 @@
-# save_data.py  
+# save_data.py
 
 import os
 import time
@@ -6,6 +6,21 @@ import requests
 import pandas as pd
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
+
+# --- symbol & timeframe lists ---
+CRYPTO = ["btcusd", "ethusd", "xrpusd"]
+FOREX = ["usdx", "eurusd", "gbpusd", "usdchf", "audusd", "nzdusd", "usdcad"]
+SYMBOLS = CRYPTO + FOREX
+
+TIMEFRAMES = ["1", "5", "15", "30", "60", "240", "D"]
+
+
+# --- timeframe to seconds ---
+def tf_to_seconds(tf: str) -> int:
+    if tf == "D":
+        return 86400
+    return int(tf) * 60
+
 
 # --- improved helper to convert many input types to unix seconds ---
 def to_unix_timestamp(value, assume_tz: str | None = "Asia/Qatar") -> int | None:
@@ -37,24 +52,14 @@ def normalize_ohlc(ohlc_data: dict, return_tz_offset_minutes: int = 210) -> pd.D
         return pd.DataFrame()
 
     t_list = list(ohlc_data.get("t", []))
-    max_val = 0
-    for x in t_list:
-        try:
-            if x is not None and pd.notna(x):
-                max_val = max(max_val, int(x))
-        except Exception:
-            pass
-    if max_val > 1_000_000_000_000:  
+    if max(t_list or [0]) > 1_000_000_000_000:
         t_list = [int(x) // 1000 if (x is not None and pd.notna(x)) else None for x in t_list]
 
-    target_tz = timezone(timedelta(minutes=return_tz_offset_minutes))  
-    datetimes = []
-    for ts in t_list:
-        if ts is None or pd.isna(ts):
-            datetimes.append(pd.NaT)
-            continue
-        dt = datetime.fromtimestamp(int(ts), tz=timezone.utc).astimezone(target_tz)
-        datetimes.append(dt)
+    target_tz = timezone(timedelta(minutes=return_tz_offset_minutes))
+    datetimes = [
+        datetime.fromtimestamp(int(ts), tz=timezone.utc).astimezone(target_tz) if ts else pd.NaT
+        for ts in t_list
+    ]
 
     df = pd.DataFrame({
         "Date": pd.DatetimeIndex(datetimes),
@@ -62,33 +67,21 @@ def normalize_ohlc(ohlc_data: dict, return_tz_offset_minutes: int = 210) -> pd.D
         "High": pd.to_numeric(ohlc_data.get("h", []), errors="coerce"),
         "Low": pd.to_numeric(ohlc_data.get("l", []), errors="coerce"),
         "Close": pd.to_numeric(ohlc_data.get("c", []), errors="coerce"),
+        "Volume": pd.to_numeric(ohlc_data.get("v", []), errors="coerce") if "v" in ohlc_data else 0,
     })
-
-    if "v" in ohlc_data:
-        df["Volume"] = pd.to_numeric(ohlc_data.get("v", []), errors="coerce")
-    else:
-        df["Volume"] = 0
 
     df.sort_values("Date", inplace=True)
     df.reset_index(drop=True, inplace=True)
-
-    # ensure backtesting.py compatibility
     df["Date"] = df["Date"].dt.tz_localize(None)  # remove timezone
     return df
 
 
-# --- get_ohlc with input timezone option ---
-def get_ohlc(symbol: str, timeframe: str,
-             from_date=None, to_date=None, input_tz: str | None = "Asia/Qatar") -> pd.DataFrame:
-    if to_date is None:
-        to_date = time.time()
-    if from_date is None:
-        from_date = to_date - 86400
-
-    from_unix = to_unix_timestamp(from_date, assume_tz=input_tz)
-    to_unix   = to_unix_timestamp(to_date,   assume_tz=input_tz)
-    if from_unix is None or to_unix is None:
-        raise ValueError("from_date and to_date must be convertable to unix seconds")
+# --- get_ohlc with dynamic lookback ---
+def get_ohlc(symbol: str, timeframe: str, input_tz: str | None = "Asia/Qatar") -> pd.DataFrame:
+    now = int(time.time())
+    candle_sec = tf_to_seconds(timeframe)
+    from_unix = now - candle_sec * 10_000
+    to_unix = now
 
     try:
         lite_finance_url = (
@@ -112,22 +105,40 @@ def get_ohlc(symbol: str, timeframe: str,
     return pd.DataFrame()
 
 
-# --- save df to csv for backtesting.py ---
+# --- save/append to csv ---
 def save_to_csv(df: pd.DataFrame, symbol: str, timeframe: str):
     os.makedirs("csv_data", exist_ok=True)
     filename = f"csv_data/csv_{symbol.lower()}_{timeframe}.csv"
-    # ensure correct CSV format
+
+    if os.path.exists(filename):
+        old_df = pd.read_csv(filename, parse_dates=["Date"])
+        df = pd.concat([old_df, df], ignore_index=True)
+        df.drop_duplicates(subset=["Date"], inplace=True)
+        df.sort_values("Date", inplace=True)
+
     df.to_csv(filename, index=False, columns=["Date", "Open", "High", "Low", "Close", "Volume"])
-    print(f"Saved: {filename}")
+    print(f"Updated: {filename}")
 
 
-# --- Example usage ---
 if __name__ == "__main__":
-    df = get_ohlc("btcusd", "5",
-                  from_date="2025-08-1",
-                  input_tz="Asia/Qatar")
-    if not df.empty:
-        save_to_csv(df, "btcusd", "5")
-        print(df.head())
-        
-        
+    MAX_RETRIES = 3
+
+    for symbol in SYMBOLS:
+        for tf in TIMEFRAMES:
+            print(f"Fetching {symbol} {tf} ...")
+            df = pd.DataFrame()
+
+            for attempt in range(1, MAX_RETRIES + 1):
+                try:
+                    df = get_ohlc(symbol, tf)
+                    if not df.empty:
+                        break  # success, no need to retry
+                except Exception as e:
+                    print(f"Attempt {attempt} failed for {symbol} {tf}: {e}")
+                time.sleep(2)  # small delay before retry
+
+            if not df.empty:
+                save_to_csv(df, symbol, tf)
+                print(f"Saved {symbol} {tf} ✅")
+            else:
+                print(f"Failed to fetch {symbol} {tf} after {MAX_RETRIES} retries ❌")

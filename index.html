@@ -2,24 +2,24 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Pyodide OHLC Plot - tight_layout fix</title>
+  <title>OHLC Plot from CSV (Pyodide)</title>
   <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
   <style>
     #plot { width: 90%; max-width:900px; margin: 16px auto; border: 1px solid #ddd; padding: 8px; min-height:200px; }
+    #log { white-space: pre-wrap; color:#333; }
   </style>
 </head>
 <body>
-  <h3>OHLC Plot (Pyodide)</h3>
+  <h3>OHLC Plot (Pyodide + CSV)</h3>
   <div id="plot">Loading...</div>
-  <pre id="log" style="white-space:pre-wrap;color:#333;"></pre>
+  <pre id="log"></pre>
 
   <script>
-  async function main(){
+  async function main() {
     const logEl = document.getElementById('log');
     const log = msg => { logEl.textContent += msg + "\n"; console.debug(msg); };
 
-    try{
-      // <-- make sure the target div exists for the backend before running Python
+    try {
       document.pyodideMplTarget = document.getElementById("plot");
 
       const pyodide = await loadPyodide();
@@ -28,112 +28,64 @@
       await pyodide.loadPackage(["pandas", "matplotlib"]);
       log("Packages loaded: pandas, matplotlib");
 
-      // fetch data (fallback to sample if CORS/fetch fails)
-      const url = "https://my.litefinance.org/chart/get-history?symbol=BTCUSD&resolution=5&from=1733095200&to=1733181600";
-      let dataObj = null;
+      // --- specify the symbol and timeframe ---
+      const symbol = "btcusd";
+      const timeframe = "5";
+
+      const csv_url = `https://mubinxyz.github.io/repo-front/csv_data/csv_${symbol}_${timeframe}.csv`;
+
+      let csvText = null;
       try {
-        const r = await fetch(url);
+        const r = await fetch(csv_url);
         if (!r.ok) throw new Error("HTTP " + r.status);
-        const json = await r.json();
-        dataObj = json.data || null;
-        log("Fetched remote data OK");
-      } catch (e) {
-        log("Fetch failed (possibly CORS) - falling back to sample data. Error: " + e);
-        dataObj = {
-          "t": [1733095200, 1733095500, 1733095800, 1733096100],
-          "o": [56000, 56100, 56050, 56200],
-          "h": [56150, 56250, 56100, 56300],
-          "l": [55950, 56000, 55900, 56150],
-          "c": [56100, 56050, 56175, 56250],
-          "v": [120, 90, 50, 75]
-        };
+        csvText = await r.text();
+        log(`Fetched CSV: ${symbol.toUpperCase()} ${timeframe}`);
+      } catch(e) {
+        log(`Fetch failed for ${symbol} ${timeframe}, using sample data. Error: ${e}`);
+        csvText = `Date,Open,High,Low,Close,Volume
+2025-08-01 00:00:00,56000,56150,55950,56100,120
+2025-08-01 00:05:00,56100,56250,56000,56050,90
+2025-08-01 00:10:00,56050,56100,55900,56175,50
+2025-08-01 00:15:00,56200,56300,56150,56250,75`;
       }
 
-      // pass data as JSON string (avoids JsProxy issues)
-      pyodide.globals.set("ohlc_json", JSON.stringify(dataObj));
+      pyodide.globals.set("csv_text", csvText);
 
       await pyodide.runPythonAsync(`
-import json
-import matplotlib
-# set backend BEFORE importing pyplot
-matplotlib.use("module://matplotlib_pyodide.html5_canvas_backend")
-
 import pandas as pd
+from io import StringIO
+import matplotlib
+matplotlib.use("module://matplotlib_pyodide.html5_canvas_backend")
 import matplotlib.pyplot as plt
-from datetime import datetime, timezone, timedelta
 
-# load json into native Python dict
-ohlc_data = json.loads(ohlc_json) if ohlc_json is not None else {}
+try:
+    df = pd.read_csv(StringIO(csv_text))
+    df["Date"] = pd.to_datetime(df["Date"])
+except Exception as e:
+    print("Failed to read CSV:", e)
+    df = pd.DataFrame()
 
-def normalize_ohlc(ohlc_data: dict, return_tz_offset_minutes: int = 210) -> pd.DataFrame:
-    if not ohlc_data:
-        return pd.DataFrame()
-    t_list = list(ohlc_data.get("t", []))
-    if not t_list:
-        return pd.DataFrame()
-    try:
-        max_t = max(x for x in t_list if x is not None)
-    except Exception:
-        max_t = 0
-    if max_t > 1_000_000_000_000:
-        t_list = [int(x)//1000 if x is not None else None for x in t_list]
-
-    target_tz = timezone(timedelta(minutes=return_tz_offset_minutes))
-    datetimes = []
-    for ts in t_list:
-        if ts is None:
-            datetimes.append(pd.NaT)
-            continue
-        dt = datetime.fromtimestamp(int(ts), tz=timezone.utc).astimezone(target_tz)
-        datetimes.append(dt)
-
-    df = pd.DataFrame({
-        "Date": pd.DatetimeIndex(datetimes),
-        "Open": pd.to_numeric(ohlc_data.get("o", []), errors="coerce"),
-        "High": pd.to_numeric(ohlc_data.get("h", []), errors="coerce"),
-        "Low": pd.to_numeric(ohlc_data.get("l", []), errors="coerce"),
-        "Close": pd.to_numeric(ohlc_data.get("c", []), errors="coerce"),
-        "Volume": pd.to_numeric(ohlc_data.get("v", []), errors="coerce") if "v" in ohlc_data else 0,
-    })
-
-    df.sort_values("Date", inplace=True)
-    df.reset_index(drop=True, inplace=True)
-    # remove tz info
-    try:
-        df["Date"] = df["Date"].dt.tz_localize(None)
-    except Exception:
-        pass
-    return df
-
-df = normalize_ohlc(ohlc_data, return_tz_offset_minutes=3*60+30)
-
-if df.empty:
-    print("No data available to plot.")
-else:
+if not df.empty:
     fig, ax = plt.subplots(figsize=(8,3))
     ax.plot(df["Date"], df["Close"], marker='o', linestyle='-')
-    ax.set_title("BTCUSD Close Price")
+    ax.set_title("${symbol.toUpperCase()} Close Price (${timeframe})")
     ax.set_xlabel("Date")
     ax.set_ylabel("Close")
     for label in ax.get_xticklabels():
         label.set_rotation(30)
-    # safer: set tight layout mode instead of forcing an immediate renderer call
-    fig.set_tight_layout(True)
-
-    # try to call tight_layout(), but guard against renderer not being available
     try:
         fig.tight_layout()
     except Exception as e:
-        print("tight_layout() unavailable right now; continuing. Error:", e)
-
+        print("tight_layout() unavailable:", e)
     plt.show()
+else:
+    print("No data available for ${symbol} ${timeframe}")
       `);
 
-      log("Python executed; plot should appear (or check log for errors).");
-
+      log("Python executed; plot should appear.");
     } catch (err) {
       console.error(err);
-      document.getElementById('log').textContent += "Fatal error: " + err + "\\n";
+      log("Fatal error: " + err);
     }
   }
 

@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>OHLC Candles (Pyodide + mplfinance)</title>
+  <title>OHLC Candles (Pyodide + mplfinance) — fixed</title>
   <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
   <style>
     body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; padding: 18px; color:#111; }
@@ -11,8 +11,9 @@
     #controls { display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
     input, select, button { padding:8px 10px; font-size:14px; border-radius:6px; border:1px solid #ccc; }
     button { cursor:pointer; background:#0077ff; color:white; border-color:#0062d6; }
-    #log { white-space: pre-wrap; background:#f7f8fb; padding:8px; border-radius:6px; margin-top:8px; color:#333; max-height:160px; overflow:auto; }
+    #log { white-space: pre-wrap; background:#f7f8fb; padding:8px; border-radius:6px; margin-top:8px; color:#333; max-height:200px; overflow:auto; }
     label{font-size:13px; color:#333;}
+    code { background:#f1f1f1; padding:2px 6px; border-radius:4px; }
   </style>
 </head>
 <body>
@@ -50,21 +51,19 @@
     const log = msg => { logEl.textContent += msg + "\n"; console.debug(msg); };
     const clearLog = () => logEl.textContent = "";
 
-    // Expose the plot target for the matplotlib-pyodide canvas backend
+    // Matplotlib canvas target for matplotlib-pyodide backend
     document.pyodideMplTarget = plotTarget;
 
     log("Loading Pyodide (this may take a moment)...");
     const pyodide = await loadPyodide();
-    log("Pyodide loaded");
+    log("Pyodide loaded.");
 
-    // Preload packages we know we'll need (matplotlib, pandas come with the bundle but ensure loaded)
-    log("Loading packages: pandas, matplotlib...");
-    await pyodide.loadPackage(["pandas", "matplotlib"]);
-    log("Base packages ready.");
+    // IMPORTANT: load micropip before any python code that uses micropip
+    log("Loading packages: pandas, matplotlib, micropip ...");
+    await pyodide.loadPackage(["pandas", "matplotlib", "micropip"]);
+    log("Base packages ready (pandas, matplotlib, micropip).");
 
-    // Function to fetch CSV from your GitHub Pages (falls back to sample data)
     async function fetchCsvText(symbol, timeframe) {
-      // adjust this base URL to match your GitHub Pages repo path if needed:
       const base = "https://mubinxyz.github.io/front/csv_data";
       const url = `${base}/csv_${symbol}_${timeframe}.csv`;
       try {
@@ -73,112 +72,102 @@
         log(`Fetched: ${url}`);
         return await r.text();
       } catch (err) {
-        log(`Fetch failed (${err}). Using sample CSV as fallback.`);
+        log(`Fetch failed (${err}). Using sample CSV fallback.`);
         return `Date,Open,High,Low,Close,Volume
-        2025-08-01 00:00:00,56000,56150,55950,56100,120
-        2025-08-01 00:05:00,56100,56250,56000,56050,90
-        2025-08-01 00:10:00,56050,56100,55900,56175,50
-        2025-08-01 00:15:00,56200,56300,56150,56250,75`;
+2025-08-01 00:00:00,56000,56150,55950,56100,120
+2025-08-01 00:05:00,56100,56250,56000,56050,90
+2025-08-01 00:10:00,56050,56100,55900,56175,50
+2025-08-01 00:15:00,56200,56300,56150,56250,75`;
       }
     }
 
-    // Core plotting function: sets csv_text, symbol, timeframe in Pyodide globals and runs Python
     async function plotCsvWithMplFinance(csvText, symbol, timeframe) {
       clearLog();
       log("Preparing plot...");
-      // set Python globals
+
+      // set python globals
       pyodide.globals.set("csv_text", csvText);
       pyodide.globals.set("symbol", symbol);
       pyodide.globals.set("timeframe", timeframe);
 
-      // Run Python that ensures mplfinance is installed, reads CSV, and draws the figure
       try {
         await pyodide.runPythonAsync(`
-        # Install mplfinance if missing, then import and plot
-        import sys
-        import pandas as pd
-        from io import StringIO
-        import matplotlib
-        matplotlib.use("module://matplotlib_pyodide.html5_canvas_backend")
-        import matplotlib.pyplot as plt
+# ---------- Python (runs inside Pyodide) ----------
+import sys
+import pandas as pd
+from io import StringIO
+import matplotlib
+matplotlib.use("module://matplotlib_pyodide.html5_canvas_backend")
+import matplotlib.pyplot as plt
 
-        # Try import mplfinance; if not present install via micropip
-        try:
-            import mplfinance as mpf
-        except Exception:
-            import micropip
-            await micropip.install("mplfinance")
-            import mplfinance as mpf
+# import micropip (we loaded micropip package from JS)
+import micropip
 
-        # Read CSV from csv_text global
-        try:
-            df = pd.read_csv(StringIO(csv_text))[:200]
-            # Normalize column names (strip & capitalize common variants)
-            df.columns = [c.strip() for c in df.columns]
-            # Ensure a Date column exists
-            if "Date" in df.columns:
-                df["Date"] = pd.to_datetime(df["Date"])
-                df.set_index("Date", inplace=True)
-            else:
-                # try index already datetime-like
-                try:
-                    df.index = pd.to_datetime(df.index)
-                except Exception:
-                    raise ValueError("CSV must contain a 'Date' column or datetime-like index")
+# try import mplfinance; if missing, install it via micropip
+try:
+    import mplfinance as mpf
+except Exception:
+    print("mplfinance not found, installing via micropip (this can take several seconds)...")
+    await micropip.install("mplfinance")
+    import mplfinance as mpf
+    print("mplfinance installed.")
 
-            # Ensure numeric OHLCV columns
-            for c in ["Open", "High", "Low", "Close", "Volume"]:
-                if c in df.columns:
-                    df[c] = pd.to_numeric(df[c], errors="coerce")
+# Read CSV text
+try:
+    df = pd.read_csv(StringIO(csv_text))[:200]
+    df.columns = [c.strip() for c in df.columns]
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
+        df.set_index("Date", inplace=True)
+    else:
+        df.index = pd.to_datetime(df.index)
+    for c in ["Open","High","Low","Close","Volume"]:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+except Exception as e:
+    print("Failed to parse CSV:", e)
+    df = pd.DataFrame()
 
-        except Exception as e:
-            print("Failed to parse CSV:", e)
-            df = pd.DataFrame()
+if df.empty or not {"Open","High","Low","Close"}.issubset(df.columns):
+    print(f"No usable OHLC data for symbol={symbol} timeframe={timeframe}.")
+else:
+    style = mpf.make_mpf_style(base_mpf_style="charles", rc={"font.size":9})
+    mav = (5, 20)
+    print("Plotting with mplfinance...")
+    fig, axlist = mpf.plot(
+        df,
+        type="candle",
+        style=style,
+        mav=mav,
+        volume=True,
+        title=f"{symbol.upper()} ({timeframe})",
+        returnfig=True,
+        figsize=(10, 4)
+    )
+    try:
+        fig.tight_layout()
+    except Exception as e:
+        print("tight_layout() unavailable:", e)
 
-        # Verify we have OHLC at minimum
-        if df.empty or not {"Open","High","Low","Close"}.issubset(df.columns):
-            print(f"No usable OHLC data for symbol={symbol} timeframe={timeframe}.")
-        else:
-            # choose style and moving averages
-            style = mpf.make_mpf_style(base_mpf_style="charles", rc={"font.size":9})
-            mav = (5, 20)
+    try:
+        fig.canvas.draw()
+    except Exception as e:
+        print("canvas.draw() failed:", e)
 
-            # create figure via mplfinance
-            fig, axlist = mpf.plot(
-                df,
-                type="candle",
-                style=style,
-                mav=mav,
-                volume=True,
-                title=f"{symbol.upper()} ({timeframe})",
-                returnfig=True,
-                figsize=(10, 4)
-            )
-
-            # Adjust layout for canvas backend
-            try:
-                fig.tight_layout()
-            except Exception as e:
-                print("tight_layout() unavailable:", e)
-
-            try:
-                fig.canvas.draw()
-            except Exception as e:
-                print("canvas.draw() failed:", e)
-
-            plt.show()
+    plt.show()
+# --------------------------------------------------
         `);
-        log("Plot executed — check the canvas above.");
+        log("Python executed — plot should appear above.");
       } catch (pyErr) {
         log("Python error: " + pyErr);
         console.error(pyErr);
       } finally {
-        // cleanup Python globals (optional)
-        try { pyodide.globals.del("csv_text"); pyodide.globals.del("symbol"); pyodide.globals.del("timeframe"); } catch(e) {}
+        // cleanup
+        try { pyodide.globals.del("csv_text"); pyodide.globals.del("symbol"); pyodide.globals.del("timeframe"); } catch(e){}
       }
     }
 
-    // Wire up the UI
+    // UI wiring
     loadBtn.addEventListener("click", async () => {
       const symbol = symbolInput.value.trim() || "btcusd";
       const timeframe = tfInput.value.trim() || "5";
@@ -186,7 +175,7 @@
       await plotCsvWithMplFinance(csvText, symbol, timeframe);
     });
 
-    // auto-run once on load for default values
+    // initial run
     const initialCsv = await fetchCsvText(symbolInput.value.trim(), tfInput.value.trim());
     await plotCsvWithMplFinance(initialCsv, symbolInput.value.trim(), tfInput.value.trim());
 

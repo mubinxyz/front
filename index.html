@@ -2,81 +2,143 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>OHLC Candles (Pyodide + mplfinance) — fixed</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Responsive OHLC Candles (Pyodide + mplfinance)</title>
   <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
   <style>
-     body {
-      font-family: Arial, sans-serif;
-      margin: 8px;
-      padding: 0;
-      background-color: #f5f5f5;
-      color: #222;
+    :root{
+      --card-bg:#fff;
+      --muted:#666;
+      --max-w:1100px;
+    }
+    html,body{height:100%;}
+    body {
+      font-family: Inter, Arial, sans-serif;
+      margin: 0;
+      padding: 12px;
+      background-color: #f5f7fb;
+      color: #111;
+      -webkit-font-smoothing:antialiased;
     }
 
-    h3 {
-      text-align: center;
-      font-size: 1.4rem;
-      margin-bottom: 0.5em;
+    .container{
+      max-width: var(--max-w);
+      margin: 12px auto;
+      padding: 12px;
+      box-sizing: border-box;
     }
 
-    #plot {
-      width: 95%;
-      max-width: 900px;
-      margin: 16px auto;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      padding: 8px;
-      min-height: 250px;
-      background-color: #fff;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+    h2{margin:0;font-size:1.1rem}
+
+    #controls{
+      margin-top:10px;
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex-wrap:wrap;
     }
 
-    #log {
-      width: 95%;
-      max-width: 900px;
-      margin: 8px auto;
-      padding: 8px;
-      background-color: #fff;
-      border-radius: 6px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-      font-size: 0.9rem;
-      overflow-wrap: break-word;
+    .control-group{display:flex;gap:6px;align-items:center}
+    label{font-size:0.95rem}
+    input[type="text"], input[type="number"]{
+      padding:8px 10px;
+      border-radius:6px;
+      border:1px solid #d6dbe3;
+      min-width:90px;
+      font-size:0.95rem;
     }
 
-    @media (max-width: 600px) {
-      #plot, #log {
-        width: 100%;
-        min-height: 200px;
-        font-size: 0.85rem;
-      }
+    button{padding:9px 12px;border-radius:8px;border:0;background:#2563eb;color:white;font-weight:600;cursor:pointer}
+    button.secondary{background:#10b981}
+    button.ghost{background:transparent;border:1px solid #cbd5e1;color:#111}
 
-      h3 {
-        font-size: 1.2rem;
-      }
+    #meta{font-size:0.85rem;color:var(--muted);margin-top:6px}
+
+    /* Plot card */
+    #plot-card{
+      margin-top:14px;
+      background:var(--card-bg);
+      border-radius:10px;
+      padding:8px;
+      box-shadow:0 6px 20px rgba(35,40,50,0.06);
+      border:1px solid #e6eef8;
+      overflow:hidden;
+    }
+
+    #plot{
+      width:100%;
+      /* preserve a good aspect ratio on small screens */
+      aspect-ratio: 16 / 8;
+      min-height:200px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:linear-gradient(180deg,#ffffff,#fbfdff);
+      border-radius:8px;
+    }
+
+    /* Ensure the canvas (from matplotlib backend) scales responsively */
+    #plot canvas{width:100% !important;height:100% !important;display:block}
+
+    #log{
+      margin-top:10px;
+      background:var(--card-bg);
+      border-radius:8px;
+      padding:8px;
+      font-size:0.9rem;
+      color:#0f172a;
+      min-height:44px;
+      max-height:240px;
+      overflow:auto;
+      border:1px solid #eef2ff;
+      white-space:pre-wrap;
+    }
+
+    .row-right{display:flex;gap:8px;align-items:center}
+
+    @media (max-width:640px){
+      input[type="text"], input[type="number"]{min-width:64px}
+      h2{font-size:1rem}
+      button{padding:10px 12px}
+      #meta{font-size:0.78rem}
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <h2>OHLC Candlestick (mplfinance via Pyodide)</h2>
+    <header>
+      <h2>OHLC Candlestick (mplfinance via Pyodide) — Responsive</h2>
+      <div class="row-right">
+        <button id="fullscreenBtn" class="ghost">Fullscreen</button>
+      </div>
+    </header>
 
     <div id="controls">
-      <label>Symbol:
-        <input id="symbol" value="btcusd" />
-      </label>
+      <div class="control-group">
+        <label>Symbol
+          <input id="symbol" type="text" inputmode="text" value="btcusd" />
+        </label>
+      </div>
 
-      <label>Timeframe:
-        <input id="timeframe" value="5" style="width:70px" />
-      </label>
+      <div class="control-group">
+        <label>Timeframe
+          <input id="timeframe" type="number" min="1" value="5" style="width:84px" />
+        </label>
+      </div>
 
-      <button id="loadBtn">Load & Plot</button>
+      <div class="control-group">
+        <button id="loadBtn">Load & Plot</button>
+        <button id="refreshBtn" class="secondary">Redraw</button>
+      </div>
 
-      <small style="margin-left:6px; color:#666;">
-        CSV path: <code>https://mubinxyz.github.io/front/csv_data/csv_SYMBOL_TIMEFRAME.csv</code>
-      </small>
+      <div id="meta">CSV path template: <code>https://mubinxyz.github.io/front/csv_data/csv_SYMBOL_TIMEFRAME.csv</code></div>
     </div>
 
-    <div id="plot">Loading Pyodide...</div>
+    <div id="plot-card">
+      <div id="plot">Loading Pyodide...</div>
+    </div>
+
     <pre id="log"></pre>
   </div>
 
@@ -87,18 +149,24 @@
     const symbolInput = document.getElementById('symbol');
     const tfInput = document.getElementById('timeframe');
     const loadBtn = document.getElementById('loadBtn');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
 
     const log = msg => { logEl.textContent += msg + "\n"; console.debug(msg); };
     const clearLog = () => logEl.textContent = "";
 
+    // Keep last plot data so we can redraw on resize
+    let _lastCsv = null;
+    let _lastSymbol = null;
+    let _lastTf = null;
+
     // Matplotlib canvas target for matplotlib-pyodide backend
     document.pyodideMplTarget = plotTarget;
 
-    log("Loading Pyodide (this may take a moment)...");
-    const pyodide = await loadPyodide();
+    log("Loading Pyodide (this may take a few seconds, especially on mobile):");
+    const pyodide = await loadPyodide({indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.0/full/'});
     log("Pyodide loaded.");
 
-    // IMPORTANT: load micropip before any python code that uses micropip
     log("Loading packages: pandas, matplotlib, micropip ...");
     await pyodide.loadPackage(["pandas", "matplotlib", "micropip"]);
     log("Base packages ready (pandas, matplotlib, micropip).");
@@ -113,87 +181,103 @@
         return await r.text();
       } catch (err) {
         log(`Fetch failed (${err}). Using sample CSV fallback.`);
-        return `Date,Open,High,Low,Close,Volume
-2025-08-01 00:00:00,56000,56150,55950,56100,120
-2025-08-01 00:05:00,56100,56250,56000,56050,90
-2025-08-01 00:10:00,56050,56100,55900,56175,50
-2025-08-01 00:15:00,56200,56300,56150,56250,75`;
+        return `Date,Open,High,Low,Close,Volume\n2025-08-01 00:00:00,56000,56150,55950,56100,120\n2025-08-01 00:05:00,56100,56250,56000,56050,90\n2025-08-01 00:10:00,56050,56100,55900,56175,50\n2025-08-01 00:15:00,56200,56300,56150,56250,75`;
       }
     }
 
-    async function plotCsvWithMplFinance(csvText, symbol, timeframe) {
+    // Debounce helper for resize
+    function debounce(fn, wait=250){
+      let t; return (...a) => { clearTimeout(t); t = setTimeout(()=>fn(...a), wait); };
+    }
+
+    async function plotCsvWithMplFinance(csvText, symbol, timeframe, options={}){
       clearLog();
       log("Preparing plot...");
 
-      // set python globals
+      _lastCsv = csvText; _lastSymbol = symbol; _lastTf = timeframe;
+
+      // compute target px size (clamp to reasonable min/max)
+      const w = Math.max(300, plotTarget.clientWidth);
+      // use an aspect that looks good on mobile
+      const h = Math.max(220, Math.round(w * 0.55));
+
       pyodide.globals.set("csv_text", csvText);
       pyodide.globals.set("symbol", symbol);
       pyodide.globals.set("timeframe", timeframe);
+      pyodide.globals.set("plot_w_px", w);
+      pyodide.globals.set("plot_h_px", h);
 
       try {
         await pyodide.runPythonAsync(`
-# ---------- Python (runs inside Pyodide) ----------
-import sys
+# ---------- Python (inside Pyodide) ----------
 import pandas as pd
 from io import StringIO
 import matplotlib
 matplotlib.use("module://matplotlib_pyodide.html5_canvas_backend")
 import matplotlib.pyplot as plt
-
-# import micropip (we loaded micropip package from JS)
 import micropip
 
-# try import mplfinance; if missing, install it via micropip
+# install mplfinance if not present
 try:
     import mplfinance as mpf
 except Exception:
-    print("mplfinance not found, installing via micropip (this can take several seconds)...")
     await micropip.install("mplfinance")
     import mplfinance as mpf
-    print("mplfinance installed.")
 
-# Read CSV text
+# receive globals
+csv_text = globals().get('csv_text')
+plot_w_px = int(globals().get('plot_w_px') or 800)
+plot_h_px = int(globals().get('plot_h_px') or 400)
+
+# convert px to inches assuming 96dpi (browser default)
+dpi = 96.0
+fig_w = max(3.5, plot_w_px / dpi)
+fig_h = max(2.5, plot_h_px / dpi)
+
 try:
-    df = pd.read_csv(StringIO(csv_text))[:200]
+    df = pd.read_csv(StringIO(csv_text))[:1000]
     df.columns = [c.strip() for c in df.columns]
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"])
-        df.set_index("Date", inplace=True)
+    if 'Date' in df.columns:
+        df['Date'] = pd.to_datetime(df['Date'])
+        df.set_index('Date', inplace=True)
     else:
         df.index = pd.to_datetime(df.index)
-    for c in ["Open","High","Low","Close","Volume"]:
+    for c in ['Open','High','Low','Close','Volume']:
         if c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
+            df[c] = pd.to_numeric(df[c], errors='coerce')
 except Exception as e:
-    print("Failed to parse CSV:", e)
+    print('Failed to parse CSV:', e)
     df = pd.DataFrame()
 
-if df.empty or not {"Open","High","Low","Close"}.issubset(df.columns):
-    print(f"No usable OHLC data for symbol={symbol} timeframe={timeframe}.")
+if df.empty or not {'Open','High','Low','Close'}.issubset(df.columns):
+    print('No usable OHLC data; show fallback text.')
+    import matplotlib.pyplot as plt
+    plt.figure(figsize=(fig_w, fig_h))
+    plt.text(0.5,0.5,'No usable OHLC data', ha='center', va='center')
+    plt.axis('off')
+    plt.show()
 else:
-    style = mpf.make_mpf_style(base_mpf_style="charles", rc={"font.size":9})
+    style = mpf.make_mpf_style(base_mpf_style='charles', rc={'font.size':9})
     mav = (5, 20)
-    print("Plotting with mplfinance...")
+    print('Plotting with mplfinance... (figsize: {}x{} inches)'.format(fig_w, fig_h))
     fig, axlist = mpf.plot(
         df,
-        type="candle",
+        type='candle',
         style=style,
         mav=mav,
         volume=True,
-        title=f"{symbol.upper()} ({timeframe})",
+        title=f"{globals().get('symbol', 'SYMBOL').upper()} ({globals().get('timeframe')})",
         returnfig=True,
-        figsize=(10, 4)
+        figsize=(fig_w, fig_h)
     )
     try:
         fig.tight_layout()
-    except Exception as e:
-        print("tight_layout() unavailable:", e)
-
+    except Exception:
+        pass
     try:
         fig.canvas.draw()
-    except Exception as e:
-        print("canvas.draw() failed:", e)
-
+    except Exception:
+        pass
     plt.show()
 # --------------------------------------------------
         `);
@@ -202,18 +286,40 @@ else:
         log("Python error: " + pyErr);
         console.error(pyErr);
       } finally {
-        // cleanup
-        try { pyodide.globals.del("csv_text"); pyodide.globals.del("symbol"); pyodide.globals.del("timeframe"); } catch(e){}
+        try { pyodide.globals.del("csv_text"); pyodide.globals.del("symbol"); pyodide.globals.del("timeframe"); pyodide.globals.del("plot_w_px"); pyodide.globals.del("plot_h_px"); } catch(e){}
       }
     }
 
-    // UI wiring
-    loadBtn.addEventListener("click", async () => {
-      const symbol = symbolInput.value.trim() || "btcusd";
-      const timeframe = tfInput.value.trim() || "5";
+    // Wire UI
+    loadBtn.addEventListener('click', async () => {
+      loadBtn.disabled = true; loadBtn.textContent = 'Loading...';
+      const symbol = symbolInput.value.trim() || 'btcusd';
+      const timeframe = tfInput.value.trim() || '5';
       const csvText = await fetchCsvText(symbol, timeframe);
       await plotCsvWithMplFinance(csvText, symbol, timeframe);
+      loadBtn.disabled = false; loadBtn.textContent = 'Load & Plot';
     });
+
+    refreshBtn.addEventListener('click', async () => {
+      if (!_lastCsv) return log('No previous data to redraw.');
+      refreshBtn.disabled = true; refreshBtn.textContent = 'Redrawing...';
+      await plotCsvWithMplFinance(_lastCsv, _lastSymbol, _lastTf);
+      refreshBtn.disabled = false; refreshBtn.textContent = 'Redraw';
+    });
+
+    fullscreenBtn.addEventListener('click', async () => {
+      if (document.fullscreenElement) return document.exitFullscreen();
+      if (plotTarget.requestFullscreen) await plotTarget.requestFullscreen();
+    });
+
+    // Resize observer — redraw on size changes (debounced)
+    const ro = new ResizeObserver(debounce(entries => {
+      for (let e of entries){
+        // only redraw when we have previous data
+        if (_lastCsv) plotCsvWithMplFinance(_lastCsv, _lastSymbol, _lastTf);
+      }
+    }, 300));
+    ro.observe(plotTarget);
 
     // initial run
     const initialCsv = await fetchCsvText(symbolInput.value.trim(), tfInput.value.trim());

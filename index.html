@@ -75,10 +75,10 @@
       } catch (err) {
         log(`Fetch failed (${err}). Using sample CSV as fallback.`);
         return `Date,Open,High,Low,Close,Volume
-2025-08-01 00:00:00,56000,56150,55950,56100,120
-2025-08-01 00:05:00,56100,56250,56000,56050,90
-2025-08-01 00:10:00,56050,56100,55900,56175,50
-2025-08-01 00:15:00,56200,56300,56150,56250,75`;
+        2025-08-01 00:00:00,56000,56150,55950,56100,120
+        2025-08-01 00:05:00,56100,56250,56000,56050,90
+        2025-08-01 00:10:00,56050,56100,55900,56175,50
+        2025-08-01 00:15:00,56200,56300,56150,56250,75`;
       }
     }
 
@@ -94,79 +94,79 @@
       // Run Python that ensures mplfinance is installed, reads CSV, and draws the figure
       try {
         await pyodide.runPythonAsync(`
-# Install mplfinance if missing, then import and plot
-import sys
-import pandas as pd
-from io import StringIO
-import matplotlib
-matplotlib.use("module://matplotlib_pyodide.html5_canvas_backend")
-import matplotlib.pyplot as plt
+        # Install mplfinance if missing, then import and plot
+        import sys
+        import pandas as pd
+        from io import StringIO
+        import matplotlib
+        matplotlib.use("module://matplotlib_pyodide.html5_canvas_backend")
+        import matplotlib.pyplot as plt
 
-# Try import mplfinance; if not present install via micropip
-try:
-    import mplfinance as mpf
-except Exception:
-    import micropip
-    await micropip.install("mplfinance")
-    import mplfinance as mpf
-
-# Read CSV from csv_text global
-try:
-    df = pd.read_csv(StringIO(csv_text))[:200]
-    # Normalize column names (strip & capitalize common variants)
-    df.columns = [c.strip() for c in df.columns]
-    # Ensure a Date column exists
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"])
-        df.set_index("Date", inplace=True)
-    else:
-        # try index already datetime-like
+        # Try import mplfinance; if not present install via micropip
         try:
-            df.index = pd.to_datetime(df.index)
+            import mplfinance as mpf
         except Exception:
-            raise ValueError("CSV must contain a 'Date' column or datetime-like index")
+            import micropip
+            await micropip.install("mplfinance")
+            import mplfinance as mpf
 
-    # Ensure numeric OHLCV columns
-    for c in ["Open", "High", "Low", "Close", "Volume"]:
-        if c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
+        # Read CSV from csv_text global
+        try:
+            df = pd.read_csv(StringIO(csv_text))[:200]
+            # Normalize column names (strip & capitalize common variants)
+            df.columns = [c.strip() for c in df.columns]
+            # Ensure a Date column exists
+            if "Date" in df.columns:
+                df["Date"] = pd.to_datetime(df["Date"])
+                df.set_index("Date", inplace=True)
+            else:
+                # try index already datetime-like
+                try:
+                    df.index = pd.to_datetime(df.index)
+                except Exception:
+                    raise ValueError("CSV must contain a 'Date' column or datetime-like index")
 
-except Exception as e:
-    print("Failed to parse CSV:", e)
-    df = pd.DataFrame()
+            # Ensure numeric OHLCV columns
+            for c in ["Open", "High", "Low", "Close", "Volume"]:
+                if c in df.columns:
+                    df[c] = pd.to_numeric(df[c], errors="coerce")
 
-# Verify we have OHLC at minimum
-if df.empty or not {"Open","High","Low","Close"}.issubset(df.columns):
-    print(f"No usable OHLC data for symbol={symbol} timeframe={timeframe}.")
-else:
-    # choose style and moving averages
-    style = mpf.make_mpf_style(base_mpf_style="charles", rc={"font.size":9})
-    mav = (5, 20)
+        except Exception as e:
+            print("Failed to parse CSV:", e)
+            df = pd.DataFrame()
 
-    # create figure via mplfinance
-    fig, axlist = mpf.plot(
-        df,
-        type="candle",
-        style=style,
-        mav=mav,
-        volume=True,
-        title=f"{symbol.upper()} ({timeframe})",
-        returnfig=True,
-        figsize=(10, 4)
-    )
+        # Verify we have OHLC at minimum
+        if df.empty or not {"Open","High","Low","Close"}.issubset(df.columns):
+            print(f"No usable OHLC data for symbol={symbol} timeframe={timeframe}.")
+        else:
+            # choose style and moving averages
+            style = mpf.make_mpf_style(base_mpf_style="charles", rc={"font.size":9})
+            mav = (5, 20)
 
-    # Adjust layout for canvas backend
-    try:
-        fig.tight_layout()
-    except Exception as e:
-        print("tight_layout() unavailable:", e)
+            # create figure via mplfinance
+            fig, axlist = mpf.plot(
+                df,
+                type="candle",
+                style=style,
+                mav=mav,
+                volume=True,
+                title=f"{symbol.upper()} ({timeframe})",
+                returnfig=True,
+                figsize=(10, 4)
+            )
 
-    try:
-        fig.canvas.draw()
-    except Exception as e:
-        print("canvas.draw() failed:", e)
+            # Adjust layout for canvas backend
+            try:
+                fig.tight_layout()
+            except Exception as e:
+                print("tight_layout() unavailable:", e)
 
-    plt.show()
+            try:
+                fig.canvas.draw()
+            except Exception as e:
+                print("canvas.draw() failed:", e)
+
+            plt.show()
         `);
         log("Plot executed — check the canvas above.");
       } catch (pyErr) {

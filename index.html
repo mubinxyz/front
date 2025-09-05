@@ -3,112 +3,42 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Responsive OHLC Candles (Pyodide + mplfinance)</title>
+  <title>Responsive OHLC Candles (Pyodide + mplfinance) — Vertical stacks + Combined</title>
   <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
+
   <style>
-    :root{
-      --card-bg:#fff;
-      --muted:#666;
-      --max-w:1100px;
-    }
-    html,body{height:100%;}
-    body {
-      font-family: Inter, Arial, sans-serif;
-      margin: 0;
-      padding: 12px;
-      background-color: #f5f7fb;
-      color: #111;
-      -webkit-font-smoothing:antialiased;
-    }
-
-    .container{
-      max-width: var(--max-w);
-      margin: 12px auto;
-      padding: 12px;
-      box-sizing: border-box;
-    }
-
+    :root{--card-bg:#fff;--muted:#666;--max-w:1100px}
+    html,body{height:100%}
+    body{font-family:Inter, Arial, sans-serif;margin:0;padding:12px;background:#f5f7fb;color:#111}
+    .container{max-width:var(--max-w);margin:12px auto;padding:12px;box-sizing:border-box}
     header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
     h2{margin:0;font-size:1.1rem}
-
-    #controls{
-      margin-top:10px;
-      display:flex;
-      gap:8px;
-      align-items:center;
-      flex-wrap:wrap;
-    }
-
+    #controls{margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     .control-group{display:flex;gap:6px;align-items:center}
     label{font-size:0.95rem}
-    input[type="text"], input[type="number"]{
-      padding:8px 10px;
-      border-radius:6px;
-      border:1px solid #d6dbe3;
-      min-width:90px;
-      font-size:0.95rem;
-    }
-
+    input[type="text"],input[type="number"]{padding:8px 10px;border-radius:6px;border:1px solid #d6dbe3;min-width:90px;font-size:0.95rem}
     button{padding:9px 12px;border-radius:8px;border:0;background:#2563eb;color:white;font-weight:600;cursor:pointer}
-    button.secondary{background:#10b981}
-    button.ghost{background:transparent;border:1px solid #cbd5e1;color:#111}
-
+    button.secondary{background:#10b981}button.ghost{background:transparent;border:1px solid #cbd5e1;color:#111}
     #meta{font-size:0.85rem;color:var(--muted);margin-top:6px}
-
-    /* Plot card */
-    #plot-card{
-      margin-top:14px;
-      background:var(--card-bg);
-      border-radius:10px;
-      padding:8px;
-      box-shadow:0 6px 20px rgba(35,40,50,0.06);
-      border:1px solid #e6eef8;
-      overflow:hidden;
-    }
-
-    #plot{
-      width:100%;
-      /* preserve a good aspect ratio on small screens */
-      aspect-ratio: 16 / 8;
-      min-height:200px;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      background:linear-gradient(180deg,#ffffff,#fbfdff);
-      border-radius:8px;
-    }
-
-    /* Ensure the canvas (from matplotlib backend) scales responsively */
-    #plot canvas{width:100% !important;height:100% !important;display:block}
-
-    #log{
-      margin-top:10px;
-      background:var(--card-bg);
-      border-radius:8px;
-      padding:8px;
-      font-size:0.9rem;
-      color:#0f172a;
-      min-height:44px;
-      max-height:240px;
-      overflow:auto;
-      border:1px solid #eef2ff;
-      white-space:pre-wrap;
-    }
-
+    #plot-card{margin-top:14px;background:var(--card-bg);border-radius:10px;padding:8px;box-shadow:0 6px 20px rgba(35,40,50,0.06);border:1px solid:#e6eef8;overflow:hidden}
+    /* Make plot a vertical stack container */
+    #plot{width:100%;min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:linear-gradient(180deg,#ffffff,#fbfdff);border-radius:8px;padding:12px;box-sizing:border-box;gap:12px}
+    /* images are block-level and centered, but full-width within the container */
+    #plot img{display:block;width:100%;max-width:100%;height:auto;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.06)}
+    #log{margin-top:10px;background:var(--card-bg);border-radius:8px;padding:8px;font-size:0.9rem;color:#0f172a;min-height:44px;max-height:240px;overflow:auto;border:1px solid:#eef2ff;white-space:pre-wrap}
     .row-right{display:flex;gap:8px;align-items:center}
-
-    @media (max-width:640px){
-      input[type="text"], input[type="number"]{min-width:64px}
-      h2{font-size:1rem}
-      button{padding:10px 12px}
-      #meta{font-size:0.78rem}
-    }
+    .skeleton{width:100%;height:160px;background:linear-gradient(90deg,#f0f3f8,#eef4ff,#f0f3f8);border-radius:8px}
+    .chart-container {margin-bottom: 20px; width: 100%;}
+    .download-buttons {display: flex; gap: 8px; margin-top: 8px; justify-content: center;}
+    .download-buttons button {padding: 6px 10px; font-size: 0.85rem; background: #6b7280;}
+    .download-buttons button:hover {background: #4b5563;}
+    @media (max-width:640px){input[type="text"],input[type="number"]{min-width:64px}h2{font-size:1rem}button{padding:10px 12px}#meta{font-size:0.78rem}}
   </style>
 </head>
 <body>
   <div class="container">
     <header>
-      <h2>OHLC Candlestick (mplfinance via Pyodide) — Responsive</h2>
+      <h2>OHLC Candlestick (mplfinance via Pyodide) — Stacked images + Combined</h2>
       <div class="row-right">
         <button id="fullscreenBtn" class="ghost">Fullscreen</button>
       </div>
@@ -116,14 +46,14 @@
 
     <div id="controls">
       <div class="control-group">
-        <label>Symbol
-          <input id="symbol" type="text" inputmode="text" value="btcusd" />
+        <label>Symbol(s)
+          <input id="symbol" type="text" inputmode="text" placeholder="btcusd, ethusd" />
         </label>
       </div>
 
       <div class="control-group">
         <label>Timeframe
-          <input id="timeframe" type="number" min="1" value="5" style="width:84px" />
+          <input id="timeframe" type="number" min="1" placeholder="15" style="width:84px" />
         </label>
       </div>
 
@@ -136,196 +66,1143 @@
     </div>
 
     <div id="plot-card">
-      <div id="plot">Loading Pyodide...</div>
+      <div id="plot">
+        <div class="skeleton" id="initial-skel"></div>
+      </div>
     </div>
 
     <pre id="log"></pre>
   </div>
 
-  <script>
-  (async () => {
-    const logEl = document.getElementById('log');
-    const plotTarget = document.getElementById('plot');
-    const symbolInput = document.getElementById('symbol');
-    const tfInput = document.getElementById('timeframe');
-    const loadBtn = document.getElementById('loadBtn');
-    const refreshBtn = document.getElementById('refreshBtn');
-    const fullscreenBtn = document.getElementById('fullscreenBtn');
+  <!-- ---------- Embedded chart.py source (unchanged) ---------- -->
+  <script id="chart-src" type="text/plain">
+# Embedded chart_service-like module adapted for Pyodide (Agg backend)
+# Produces high-dpi PNGs (dpi=300), returns Blob URLs to JS. JS will stack images client-side
+try:
+    import js
+    globals()['window'] = js.window
+    globals()['document'] = js.document
+except Exception:
+    pass
 
-    const log = msg => { logEl.textContent += msg + "\n"; console.debug(msg); };
-    const clearLog = () => logEl.textContent = "";
-
-    // Keep last plot data so we can redraw on resize
-    let _lastCsv = null;
-    let _lastSymbol = null;
-    let _lastTf = null;
-
-    // Matplotlib canvas target for matplotlib-pyodide backend
-    document.pyodideMplTarget = plotTarget;
-
-    log("Loading Pyodide (this may take a few seconds, especially on mobile):");
-    const pyodide = await loadPyodide({indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.0/full/'});
-    log("Pyodide loaded.");
-
-    log("Loading packages: pandas, matplotlib, micropip ...");
-    await pyodide.loadPackage(["pandas", "matplotlib", "micropip"]);
-    log("Base packages ready (pandas, matplotlib, micropip).");
-
-    async function fetchCsvText(symbol, timeframe) {
-      const base = "https://mubinxyz.github.io/front/csv_data";
-      const url = `${base}/csv_${symbol}_${timeframe}.csv`;
-      try {
-        const r = await fetch(url);
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        log(`Fetched: ${url}`);
-        return await r.text();
-      } catch (err) {
-        log(`Fetch failed (${err}). Using sample CSV fallback.`);
-        return `Date,Open,High,Low,Close,Volume\n2025-08-01 00:00:00,56000,56150,55950,56100,120\n2025-08-01 00:05:00,56100,56250,56000,56050,90\n2025-08-01 00:10:00,56050,56100,55900,56175,50\n2025-08-01 00:15:00,56200,56300,56150,56250,75`;
-      }
-    }
-
-    // Debounce helper for resize
-    function debounce(fn, wait=250){
-      let t; return (...a) => { clearTimeout(t); t = setTimeout(()=>fn(...a), wait); };
-    }
-
-    async function plotCsvWithMplFinance(csvText, symbol, timeframe, options={}){
-      clearLog();
-      log("Preparing plot...");
-
-      _lastCsv = csvText; _lastSymbol = symbol; _lastTf = timeframe;
-
-      // compute target px size (clamp to reasonable min/max)
-      const w = Math.max(300, plotTarget.clientWidth);
-      // use an aspect that looks good on mobile
-      const h = Math.max(220, Math.round(w * 0.55));
-
-      pyodide.globals.set("csv_text", csvText);
-      pyodide.globals.set("symbol", symbol);
-      pyodide.globals.set("timeframe", timeframe);
-      pyodide.globals.set("plot_w_px", w);
-      pyodide.globals.set("plot_h_px", h);
-
-      try {
-        await pyodide.runPythonAsync(`
-# ---------- Python (inside Pyodide) ----------
+import io
+import time
 import pandas as pd
-from io import StringIO
 import matplotlib
-matplotlib.use("module://matplotlib_pyodide.html5_canvas_backend")
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import micropip
 
-# install mplfinance if not present
-try:
-    import mplfinance as mpf
-except Exception:
-    await micropip.install("mplfinance")
-    import mplfinance as mpf
+_mpf_cached = None
+_pillow_available = None
 
-# receive globals
-csv_text = globals().get('csv_text')
-plot_w_px = int(globals().get('plot_w_px') or 800)
-plot_h_px = int(globals().get('plot_h_px') or 400)
+async def _ensure_mplfinance():
+    global _mpf_cached
+    if _mpf_cached is not None:
+        return _mpf_cached
+    try:
+        import mplfinance as mpf
+    except Exception:
+        try:
+            await micropip.install("mplfinance")
+            import mplfinance as mpf
+        except Exception as e:
+            raise RuntimeError(f"Failed to install mplfinance in Pyodide: {e}")
+    _mpf_cached = mpf
+    return mpf
 
-# convert px to inches assuming 96dpi (browser default)
-dpi = 96.0
-fig_w = max(3.5, plot_w_px / dpi)
-fig_h = max(2.5, plot_h_px / dpi)
+async def _ensure_pillow():
+    global _pillow_available
+    if _pillow_available is not None:
+        return _pillow_available
+    try:
+        from PIL import Image
+        _pillow_available = True
+        return True
+    except Exception:
+        try:
+            await micropip.install("Pillow")
+            from PIL import Image
+            _pillow_available = True
+            return True
+        except Exception:
+            _pillow_available = False
+            return False
 
-try:
-    df = pd.read_csv(StringIO(csv_text))[:1000]
-    df.columns = [c.strip() for c in df.columns]
-    if 'Date' in df.columns:
-        df['Date'] = pd.to_datetime(df['Date'])
-        df.set_index('Date', inplace=True)
+from dateutil import tz as dateutil_tz
+import datetime as dt
+
+SOURCE_TZ = dateutil_tz.tzoffset(None, 3 * 3600)
+LOCAL_TZ_NAME = "Asia/Tehran"
+LOCAL_OFFSET_MINUTES = 210
+NEAR_TOLERANCE_HOURS = 3
+QUARTER_COLORS = ["C2","C3","C4","C5"]
+TRUEOPEN_COLOR = "C6"
+TRUEOPEN_STYLE = "--"
+
+# Helpers (same as previous)
+
+def _parse_datetimes_to_utc(series: pd.Series, source_tz=SOURCE_TZ) -> pd.Series:
+    if pd.api.types.is_integer_dtype(series) or pd.api.types.is_float_dtype(series):
+        try:
+            non_na = series.dropna()
+            maxv = int(non_na.max()) if not non_na.empty else 0
+        except Exception:
+            maxv = 0
+        unit = "ms" if maxv > 10**12 else "s"
+        s = pd.to_datetime(series, unit=unit, errors='coerce')
+        try:
+            return s.dt.tz_localize(source_tz).dt.tz_convert("UTC")
+        except Exception:
+            fallback = dateutil_tz.tzoffset(None, LOCAL_OFFSET_MINUTES * 60)
+            return s.dt.tz_localize(fallback).dt.tz_convert("UTC")
+    s = pd.to_datetime(series, errors='coerce')
+    if s.dt.tz is None:
+        try:
+            return s.dt.tz_localize(source_tz).dt.tz_convert("UTC")
+        except Exception:
+            fallback = dateutil_tz.tzoffset(None, LOCAL_OFFSET_MINUTES * 60)
+            return s.dt.tz_localize(fallback).dt.tz_convert("UTC")
     else:
-        df.index = pd.to_datetime(df.index)
-    for c in ['Open','High','Low','Close','Volume']:
-        if c in df.columns:
-            df[c] = pd.to_numeric(df[c], errors='coerce')
-except Exception as e:
-    print('Failed to parse CSV:', e)
-    df = pd.DataFrame()
+        return s.dt.tz_convert("UTC")
 
-if df.empty or not {'Open','High','Low','Close'}.issubset(df.columns):
-    print('No usable OHLC data; show fallback text.')
-    import matplotlib.pyplot as plt
-    plt.figure(figsize=(fig_w, fig_h))
-    plt.text(0.5,0.5,'No usable OHLC data', ha='center', va='center')
-    plt.axis('off')
-    plt.show()
-else:
-    style = mpf.make_mpf_style(base_mpf_style='charles', rc={'font.size':9})
-    mav = (5, 20)
-    print('Plotting with mplfinance... (figsize: {}x{} inches)'.format(fig_w, fig_h))
-    fig, axlist = mpf.plot(
-        df,
-        type='candle',
-        style=style,
-        mav=mav,
-        volume=True,
-        title=f"{globals().get('symbol', 'SYMBOL').upper()} ({globals().get('timeframe')})",
-        returnfig=True,
-        figsize=(fig_w, fig_h)
-    )
+
+def _quarter_boundaries_utc_for_index(index: pd.DatetimeIndex, local_offset_minutes: int = LOCAL_OFFSET_MINUTES, tz_name: str = LOCAL_TZ_NAME):
+    if index is None or index.empty:
+        return []
+    if index.tz is None:
+        idx_utc = index.tz_localize("UTC")
+    else:
+        idx_utc = index.tz_convert("UTC")
     try:
-        fig.tight_layout()
+        idx_local = idx_utc.tz_convert(tz_name)
+        local_tz = idx_local.tz
+    except Exception:
+        local_tz = dateutil_tz.tzoffset(None, local_offset_minutes * 60)
+        idx_local = idx_utc.tz_convert(local_tz)
+    start_local = (idx_local.min() - pd.Timedelta(days=1)).normalize()
+    end_local = (idx_local.max() + pd.Timedelta(days=1)).normalize()
+    days = pd.date_range(start=start_local, end=end_local, freq="D", tz=idx_local.tz)
+    local_times = [(1,30),(7,30),(13,30),(19,30)]
+    boundaries_utc = []
+    for day in days:
+        for hh,mm in local_times:
+            try:
+                local_ts = pd.Timestamp(year=day.year, month=day.month, day=day.day, hour=hh, minute=mm, tz=idx_local.tz)
+                boundaries_utc.append(local_ts.tz_convert("UTC"))
+            except Exception:
+                local_dt = dt.datetime(year=day.year, month=day.month, day=day.day, hour=hh, minute=mm, tzinfo=local_tz)
+                boundaries_utc.append(pd.Timestamp(local_dt.astimezone(dateutil_tz.tzutc())))
+        nd = day + pd.Timedelta(days=1)
+        try:
+            local_next = pd.Timestamp(year=nd.year, month=nd.month, day=nd.day, hour=1, minute=30, tz=idx_local.tz)
+            boundaries_utc.append(local_next.tz_convert("UTC"))
+        except Exception:
+            local_dt_next = dt.datetime(year=nd.year, month=nd.month, day=nd.day, hour=1, minute=30, tzinfo=local_tz)
+            boundaries_utc.append(pd.Timestamp(local_dt_next.astimezone(dateutil_tz.tzutc())))
+    boundaries_utc = sorted(list(dict.fromkeys(boundaries_utc)))
+    return boundaries_utc
+
+
+def _five_minute_boundaries_utc_for_index(index: pd.DatetimeIndex, local_offset_minutes: int = LOCAL_OFFSET_MINUTES, tz_name: str = LOCAL_TZ_NAME):
+    if index is None or index.empty:
+        return []
+    quarter_boundaries = _quarter_boundaries_utc_for_index(index, local_offset_minutes=local_offset_minutes, tz_name=tz_name)
+    if not quarter_boundaries:
+        return []
+    try:
+        local_quarters = [qb.tz_convert(tz_name) for qb in quarter_boundaries]
+    except Exception:
+        local_tz = dateutil_tz.tzoffset(None, local_offset_minutes * 60)
+        local_quarters = []
+        for qb in quarter_boundaries:
+            local_quarters.append(pd.Timestamp(qb).tz_convert(local_tz)
+)
+    five_min_boundaries_local = []
+    for i in range(len(local_quarters)-1):
+        start = local_quarters[i]
+        end = local_quarters[i+1]
+        for k in range(4):
+            ts_local = start + pd.Timedelta(minutes=90*k)
+            if ts_local >= start and ts_local <= end:
+                five_min_boundaries_local.append(ts_local)
+    five_min_boundaries_local.append(local_quarters[-1])
+    boundaries_utc = []
+    for ts in five_min_boundaries_local:
+        try:
+            boundaries_utc.append(ts.tz_convert("UTC"))
+        except Exception:
+            boundaries_utc.append(pd.Timestamp(ts).tz_localize(dateutil_tz.gettz(tz_name)).tz_convert("UTC"))
+    boundaries_utc = sorted(list(dict.fromkeys(boundaries_utc)))
+    return boundaries_utc
+
+
+def _get_main_ax_from_mpf_axes(axes):
+    if isinstance(axes, (list, tuple)):
+        return axes[0]
+    if isinstance(axes, dict):
+        return axes.get("main", next(iter(axes.values())))
+    return axes
+
+
+def _quarter_index_from_boundary(boundary_utc: pd.Timestamp, tz_name: str = LOCAL_TZ_NAME, timeframe: int = 15) -> int:
+    if boundary_utc is None:
+        return 0
+    try:
+        if getattr(boundary_utc, "tzinfo", None) is None:
+            b_utc = pd.Timestamp(boundary_utc).tz_localize("UTC")
+        else:
+            b_utc = pd.Timestamp(boundary_utc).tz_convert("UTC")
+        local = b_utc.tz_convert(tz_name)
+        if timeframe == 5:
+            h = local.hour; m = local.minute
+            mins = h*60 + m
+            def mm(hh, mm_): return hh*60 + mm_
+            q1_start = mm(1,30); q2_start = mm(7,30); q3_start = mm(13,30); q4_start = mm(19,30)
+            if q1_start <= mins < q2_start: quarter_start = q1_start
+            elif q2_start <= mins < q3_start: quarter_start = q2_start
+            elif q3_start <= mins < q4_start: quarter_start = q3_start
+            else: quarter_start = q4_start
+            segment_position = (mins - quarter_start) // 90
+            return int(segment_position % 4)
+        elif timeframe == 15:
+            h = local.hour; m = local.minute; mins = h*60 + m
+            def mm(hh, mm_): return hh*60 + mm_
+            q1_start = mm(1,30); q2_start = mm(7,30); q3_start = mm(13,30); q4_start = mm(19,30)
+            if q1_start <= mins < q2_start: return 0
+            if q2_start <= mins < q3_start: return 1
+            if q3_start <= mins < q4_start: return 2
+            return 3
+        elif timeframe == 60:
+            weekday = local.weekday()
+            if weekday == 0: return 0
+            elif weekday == 1: return 1
+            elif weekday == 2: return 2
+            elif weekday == 3: return 3
+            else: return 3
+        elif timeframe == 240:
+            week_of_month = (local.day - 1) // 7 + 1
+            week_of_month = min(week_of_month, 4)
+            return week_of_month - 1
+        else:
+            return 0
+    except Exception:
+        return 0
+
+# Main plotting: returns list of Blob URLs (JS) for individual charts and combined last image when possible
+async def plot_from_csv_many(jobs, plot_w_px, plot_h_px):
+    try:
+        jobs = jobs.to_py()
     except Exception:
         pass
+
+    mpf = await _ensure_mplfinance()
+    pillow_ok = await _ensure_pillow()
+
+    dpi = 300  # higher dpi for clearer images
+    fig_w = max(3.5, float(plot_w_px) / 96.0)
+    fig_h = max(2.5, float(plot_h_px) / 96.0)
+
+    chart_buffers = []
+    for job in jobs:
+        csv_text = job.get('csv_text','') if isinstance(job, dict) else job['csv_text'] if 'csv_text' in job else ''
+        symbol = job.get('symbol','') if isinstance(job, dict) else job.get('symbol','')
+        timeframe = int(job.get('timeframe',15)) if isinstance(job, dict) else int(job.get('timeframe',15))
+
+        try:
+            df = pd.read_csv(io.StringIO(csv_text))
+            df.columns = [c.strip() for c in df.columns]
+        except Exception:
+            df = pd.DataFrame()
+
+        if df.empty or not {'Open','High','Low','Close'}.issubset(df.columns):
+            fig = plt.figure(figsize=(fig_w, fig_h))
+            plt.text(0.5,0.5,'No usable OHLC data', ha='center', va='center')
+            plt.axis('off')
+            b = io.BytesIO(); fig.savefig(b, format='png', dpi=dpi, bbox_inches='tight'); b.seek(0)
+            try: plt.close(fig)
+            except Exception: pass
+            chart_buffers.append(b)
+            continue
+
+        # normalize
+        if 'Date' in df.columns:
+            df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+            df.set_index('Date', inplace=True)
+        elif 'datetime' in df.columns:
+            df['datetime'] = _parse_datetimes_to_utc(df['datetime'], source_tz=SOURCE_TZ)
+            df = df.dropna(subset=['datetime'])
+            df.set_index('datetime', inplace=True)
+        else:
+            if isinstance(df.index, pd.DatetimeIndex):
+                df.index = _parse_datetimes_to_utc(pd.Series(df.index), source_tz=SOURCE_TZ)
+                df.index = pd.DatetimeIndex(df.index)
+                if df.index.tz is None:
+                    df.index = df.index.tz_localize('UTC')
+                else:
+                    df.index = df.index.tz_convert('UTC')
+
+        for c in ['Open','High','Low','Close','Volume']:
+            if c in df.columns:
+                df[c] = pd.to_numeric(df[c], errors='coerce')
+
+        # Ensure tz-aware index
+        try:
+            if df.index.tz is None:
+                try:
+                    df.index = df.index.tz_localize('UTC')
+                except Exception:
+                    df.index = pd.to_datetime(df.index, errors='coerce').tz_localize('UTC')
+            else:
+                df.index = df.index.tz_convert('UTC')
+        except Exception:
+            try:
+                df.index = pd.to_datetime(df.index, errors='coerce').tz_localize('UTC')
+            except Exception:
+                pass
+
+        # limit rows to match chart_service time window
+        to_date = int(time.time())
+        if timeframe == 5:
+            seconds_range = 0.3 * 24 * 60 * 60
+        elif timeframe == 15:
+            seconds_range = 1.25 * 24 * 60 * 60
+        elif timeframe == 60:
+            seconds_range = 4.5 * 24 * 60 * 60
+        elif timeframe == 240:
+            seconds_range = 30 * 24 * 60 * 60
+        else:
+            seconds_range = 3 * 24 * 60 * 60
+        slice_count = max(20, int(seconds_range / (timeframe * 60)))
+        try:
+            if len(df) > slice_count:
+                df = df.iloc[-slice_count:]
+        except Exception:
+            pass
+
+        if df.empty or not {'Open','High','Low','Close'}.issubset(df.columns):
+            fig = plt.figure(figsize=(fig_w, fig_h))
+            plt.text(0.5,0.5,'No usable OHLC data', ha='center', va='center')
+            plt.axis('off')
+            b = io.BytesIO(); fig.savefig(b, format='png', dpi=dpi, bbox_inches='tight'); b.seek(0)
+            try: plt.close(fig)
+            except Exception: pass
+            chart_buffers.append(b)
+            continue
+
+        # boundaries and plotting
+        if timeframe == 5:
+            boundaries = _five_minute_boundaries_utc_for_index(df.index)
+        else:
+            boundaries = _quarter_boundaries_utc_for_index(df.index)
+
+        tol = pd.Timedelta(minutes=45) if timeframe == 5 else (pd.Timedelta(minutes=60) if timeframe == 15 else pd.Timedelta(hours=NEAR_TOLERANCE_HOURS))
+
+        try:
+            idx_min = df.index.min()
+            idx_max = df.index.max()
+            if getattr(idx_min, 'tzinfo', None) is None:
+                idx_min = pd.Timestamp(idx_min).tz_localize('UTC')
+            if getattr(idx_max, 'tzinfo', None) is None:
+                idx_max = pd.Timestamp(idx_max).tz_localize('UTC')
+        except Exception:
+            idx_min = df.index.min(); idx_max = df.index.max()
+
+        filtered_boundaries = [b for b in boundaries if (b >= (idx_min - tol) and b <= (idx_max + tol))]
+
+        try:
+            fig, axes = mpf.plot(df, type='candle', style='yahoo', ylabel='Price', figsize=(fig_w, fig_h), volume=False, returnfig=True)
+        except Exception:
+            fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+            ax.text(0.5,0.5,'mplfinance failed', ha='center')
+            axes = ax
+
+        main_ax = _get_main_ax_from_mpf_axes(axes)
+
+        # same annotation logic (quarters, HLs, true-open, labels)
+        import matplotlib.patches as mpatches
+        rects = []
+        for child in main_ax.get_children():
+            if isinstance(child, mpatches.Rectangle):
+                try:
+                    bbox = child.get_bbox()
+                    if bbox.width > 0 and abs(bbox.height) > 0 and bbox.width < 1000:
+                        rects.append(child)
+                except Exception:
+                    continue
+        used_x_centers = None
+        if rects:
+            rects_sorted = sorted(rects, key=lambda r: r.get_x())
+            used_x_centers = [r.get_x() + r.get_width() / 2.0 for r in rects_sorted]
+
+        x_coords_for_boundaries = []
+        good_boundaries = []
+        for b in filtered_boundaries:
+            try:
+                pos = df.index.get_indexer([pd.Timestamp(b)], method='nearest')[0]
+                if pos == -1:
+                    continue
+                nearest_ts = df.index[pos]
+                delta = abs((nearest_ts - b).total_seconds())
+                if delta > tol.total_seconds():
+                    continue
+                if used_x_centers and pos < len(used_x_centers):
+                    x_coords_for_boundaries.append(used_x_centers[pos])
+                else:
+                    x_coords_for_boundaries.append(float(pos))
+                good_boundaries.append(b)
+            except Exception:
+                continue
+
+        for xcoord in x_coords_for_boundaries:
+            try:
+                main_ax.axvline(x=xcoord, linestyle='--', linewidth=1.2, alpha=0.95, color='C1', zorder=1)
+            except Exception:
+                pass
+
+        def _col_choice(df_obj, *candidates):
+            for c in candidates:
+                if c in df_obj.columns:
+                    return c
+            for c in candidates:
+                lc = c.lower()
+                if lc in df_obj.columns:
+                    return lc
+            return None
+
+        high_col = _col_choice(df, 'High','high')
+        low_col = _col_choice(df, 'Low','low')
+        open_col = _col_choice(df, 'Open','open')
+
+        interval_highs=[]; interval_lows=[]; interval_high_ts=[]; interval_low_ts=[]; interval_open_ts=[]
+        for i in range(max(0,len(good_boundaries)-1)):
+            start_b = good_boundaries[i]; end_b = good_boundaries[i+1]
+            try:
+                mask = (df.index >= pd.Timestamp(start_b)) & (df.index < pd.Timestamp(end_b))
+                segment = df.loc[mask]
+                if segment.empty:
+                    interval_highs.append(None); interval_lows.append(None); interval_high_ts.append(None); interval_low_ts.append(None); interval_open_ts.append(None)
+                else:
+                    h = segment[high_col].max() if high_col else None
+                    l = segment[low_col].min() if low_col else None
+                    interval_highs.append(h if pd.notna(h) else None)
+                    interval_lows.append(l if pd.notna(l) else None)
+                    try: interval_high_ts.append(segment[segment[high_col]==h].index[0])
+                    except Exception: interval_high_ts.append(None)
+                    try: interval_low_ts.append(segment[segment[low_col]==l].index[0])
+                    except Exception: interval_low_ts.append(None)
+                    try: interval_open_ts.append(segment.index[0])
+                    except Exception: interval_open_ts.append(None)
+            except Exception:
+                interval_highs.append(None); interval_lows.append(None); interval_high_ts.append(None); interval_low_ts.append(None); interval_open_ts.append(None)
+
+        boundary_quarter_idx = [_quarter_index_from_boundary(b, tz_name=LOCAL_TZ_NAME, timeframe=timeframe) for b in good_boundaries]
+
+        last_pos = (len(df)-1) if len(df) >= 1 else None
+        last_minus_one_pos = (len(df)-2) if len(df) >= 2 else None
+        last_minus_one_x = None
+        last_plus_ten_x = None
+        if last_minus_one_pos is not None:
+            if used_x_centers and last_minus_one_pos < len(used_x_centers):
+                last_minus_one_x = used_x_centers[last_minus_one_pos]
+            else:
+                last_minus_one_x = float(last_minus_one_pos)
+        if last_pos is not None:
+            if used_x_centers and last_pos < len(used_x_centers):
+                last_plus_ten_x = used_x_centers[last_pos] + 10.0
+            else:
+                last_plus_ten_x = float(last_pos) + 10.0
+
+        try:
+            if used_x_centers and len(used_x_centers) >= 2:
+                candle_spacing = used_x_centers[1] - used_x_centers[0]
+            else:
+                candle_spacing = 1.0
+            hl_pad = max(candle_spacing * 0.12, 0.2)
+        except Exception:
+            hl_pad = 0.3
+
+        interval_count = len(interval_highs)
+
+        for j in range(interval_count):
+            prev_h = interval_highs[j]; prev_l = interval_lows[j]
+            prev_h_ts = interval_high_ts[j]; prev_l_ts = interval_low_ts[j]
+            q_idx = boundary_quarter_idx[j] if j < len(boundary_quarter_idx) else (j % 4)
+            q_color = QUARTER_COLORS[q_idx % 4]
+
+            xend = None
+            try:
+                if (j + 2) < len(x_coords_for_boundaries):
+                    xend = x_coords_for_boundaries[j + 2]
+                else:
+                    xend = last_plus_ten_x
+            except Exception:
+                xend = last_plus_ten_x
+
+            def _ts_to_x(ts_val):
+                if ts_val is None: return None
+                try:
+                    pos = df.index.get_indexer([pd.Timestamp(ts_val)], method='nearest')[0]
+                    if pos == -1: return None
+                    return (used_x_centers[pos] if (used_x_centers and pos < len(used_x_centers)) else float(pos))
+                except Exception:
+                    return None
+
+            xstart_h = _ts_to_x(prev_h_ts)
+            xstart_l = _ts_to_x(prev_l_ts)
+
+            if xstart_h is None and prev_h is not None:
+                try:
+                    pos_left = df.index.get_indexer([pd.Timestamp(good_boundaries[j])], method='nearest')[0]
+                    xstart_h = (used_x_centers[pos_left] if (used_x_centers and pos_left < len(used_x_centers)) else float(pos_left))
+                except Exception:
+                    xstart_h = None
+            if xstart_l is None and prev_l is not None:
+                try:
+                    pos_left = df.index.get_indexer([pd.Timestamp(good_boundaries[j])], method='nearest')[0]
+                    xstart_l = (used_x_centers[pos_left] if (used_x_centers and pos_left < len(used_x_centers)) else float(pos_left))
+                except Exception:
+                    xstart_l = None
+
+            try:
+                if prev_h is not None and xstart_h is not None and xend is not None:
+                    xmin = xstart_h + hl_pad
+                    xmax = xend - hl_pad if xend is not None else xend
+                    if xmax is None or xmax <= xmin:
+                        xmax = xend
+                    main_ax.hlines(y=float(prev_h), xmin=xmin, xmax=xmax, linewidth=1.0, colors=q_color, linestyle='-', alpha=0.95, zorder=3)
+                if prev_l is not None and xstart_l is not None and xend is not None:
+                    xmin = xstart_l + hl_pad
+                    xmax = xend - hl_pad if xend is not None else xend
+                    if xmax is None or xmax <= xmin:
+                        xmax = xend
+                    main_ax.hlines(y=float(prev_l), xmin=xmin, xmax=xmax, linewidth=1.0, colors=q_color, linestyle='-', alpha=0.95, zorder=3)
+            except Exception:
+                pass
+
+        if open_col is not None:
+            try:
+                for i in range(0, max(0, len(good_boundaries)-1)):
+                    try:
+                        if i >= len(boundary_quarter_idx):
+                            continue
+                        if boundary_quarter_idx[i] != 1:
+                            continue
+                        open_ts = interval_open_ts[i] if i < len(interval_open_ts) else None
+                        open_price = None; xstart=None
+                        if open_ts is not None:
+                            try:
+                                pos_open = df.index.get_indexer([pd.Timestamp(open_ts)], method='nearest')[0]
+                                if pos_open != -1 and pos_open < len(df):
+                                    open_price = df.iloc[pos_open][open_col]
+                                    xstart = (used_x_centers[pos_open] if (used_x_centers and pos_open < len(used_x_centers)) else float(pos_open))
+                            except Exception:
+                                open_price=None; xstart=None
+                        if (open_price is None or xstart is None) and i < len(good_boundaries):
+                            try:
+                                pos_left = df.index.get_indexer([pd.Timestamp(good_boundaries[i])], method='nearest')[0]
+                                if pos_left != -1 and pos_left < len(df):
+                                    open_price = df.iloc[pos_left][open_col]
+                                    xstart = (used_x_centers[pos_left] if (used_x_centers and pos_left < len(used_x_centers)) else float(pos_left))
+                            except Exception:
+                                pass
+                        if open_price is None or xstart is None:
+                            continue
+                        xend = None
+                        end_boundary_idx = i + 3
+                        if end_boundary_idx < len(x_coords_for_boundaries):
+                            xend = x_coords_for_boundaries[end_boundary_idx]
+                        else:
+                            xend = last_minus_one_x
+                        if xstart is not None and xend is not None:
+                            try:
+                                main_ax.hlines(y=float(open_price), xmin=xstart, xmax=xend, linewidth=1.0, colors=TRUEOPEN_COLOR, linestyle=TRUEOPEN_STYLE, alpha=0.95, zorder=2)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        try:
+            if len(interval_open_ts) > 0 and last_minus_one_x is not None:
+                candidate_interval_idx = len(interval_open_ts) - 1
+                q_candidate = None
+                if candidate_interval_idx < len(boundary_quarter_idx):
+                    q_candidate = boundary_quarter_idx[candidate_interval_idx]
+                else:
+                    try:
+                        candidate_ts = interval_open_ts[candidate_interval_idx]
+                        if candidate_ts is not None:
+                            q_candidate = _quarter_index_from_boundary(candidate_ts, tz_name=LOCAL_TZ_NAME, timeframe=timeframe)
+                    except Exception:
+                        q_candidate = None
+                if q_candidate == 1:
+                    open_ts = interval_open_ts[candidate_interval_idx]
+                    open_price = None; xstart = None
+                    if open_ts is not None:
+                        try:
+                            pos_open = df.index.get_indexer([pd.Timestamp(open_ts)], method='nearest')[0]
+                            if pos_open != -1 and pos_open < len(df):
+                                open_price = df.iloc[pos_open][open_col]
+                                xstart = (used_x_centers[pos_open] if (used_x_centers and pos_open < len(used_x_centers)) else float(pos_open))
+                        except Exception:
+                            open_price=None; xstart=None
+                    if (open_price is None or xstart is None) and candidate_interval_idx < len(good_boundaries):
+                        try:
+                            pos_left = df.index.get_indexer([pd.Timestamp(good_boundaries[candidate_interval_idx])], method='nearest')[0]
+                            if pos_left != -1 and pos_left < len(df):
+                                open_price = df.iloc[pos_left][open_col]
+                                xstart = (used_x_centers[pos_left] if (used_x_centers and pos_left < len(used_x_centers)) else float(pos_left))
+                        except Exception:
+                            pass
+                    if open_price is not None and xstart is not None:
+                        try:
+                            main_ax.hlines(y=float(open_price), xmin=xstart, xmax=last_minus_one_x, linewidth=1.0, colors=TRUEOPEN_COLOR, linestyle=TRUEOPEN_STYLE, alpha=0.95, zorder=2)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
+        # --- add quarter labels (between quarter lines) and legend ---
+        import matplotlib.lines as mlines
+        try:
+            # Reserve a little top space so labels + legend don't clip
+            try:
+                y_min, y_max = main_ax.get_ylim()
+                top_margin = 0.92
+                try:
+                    fig.subplots_adjust(top=top_margin, bottom=0.08, left=0.05, right=0.95)
+                except Exception:
+                    pass
+            except Exception:
+                y_min, y_max = None, None
+
+            # Quarter labels: place label at midpoint between consecutive quarter vlines
+            try:
+                mids = []
+                if len(x_coords_for_boundaries) >= 2:
+                    for i in range(len(x_coords_for_boundaries) - 1):
+                        a = x_coords_for_boundaries[i]
+                        b = x_coords_for_boundaries[i + 1]
+                        try:
+                            mids.append((float(a) + float(b)) / 2.0)
+                        except Exception:
+                            try:
+                                mids.append((a + b) / 2.0)
+                            except Exception:
+                                continue
+                # draw labels for each midpoint; choose quarter index from boundary_quarter_idx for the interval
+                for idx_mid, xmid in enumerate(mids):
+                    try:
+                        # map to interval quarter index: prefer boundary_quarter_idx[idx_mid+1] if exists, else idx_mid
+                        if (idx_mid + 1) < len(boundary_quarter_idx):
+                            q_idx = boundary_quarter_idx[idx_mid + 1]
+                        elif idx_mid < len(boundary_quarter_idx):
+                            q_idx = boundary_quarter_idx[idx_mid]
+                        else:
+                            q_idx = idx_mid % 4
+                        label = f"Q{(q_idx % 4) + 1}"
+                        main_ax.text(xmid, 0.96, label,
+                                     transform=main_ax.get_xaxis_transform(),
+                                     ha='center', va='bottom',
+                                     fontsize=8, color=QUARTER_COLORS[q_idx % len(QUARTER_COLORS)],
+                                     bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'),
+                                     zorder=6, clip_on=False)
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
+            # Legend: representative handles for quarter boundaries, HL/LL, and true-open lines.
+            try:
+                boundary_line = mlines.Line2D([], [], color='C1', linestyle='--', linewidth=1.2, label='Quarter boundary')
+                hl_line = mlines.Line2D([], [], color='C2', linestyle='-', linewidth=1.0, label='Interval HL/LL')
+                trueopen_line = mlines.Line2D([], [], color=TRUEOPEN_COLOR, linestyle=TRUEOPEN_STYLE, linewidth=1.0, label='True Open')
+                main_ax.legend(handles=[boundary_line, hl_line, trueopen_line],
+                               loc='upper right', framealpha=0.9, fontsize=8, ncol=1, handlelength=1.5)
+            except Exception:
+                pass
+
+        except Exception:
+            pass
+        # --- end quarter labels and legend ---
+
+        try:
+            y_min, y_max = main_ax.get_ylim()
+            margin = (y_max - y_min) * 0.03
+            main_ax.set_ylim(y_min - margin, y_max + margin)
+        except Exception:
+            pass
+        main_ax.grid(True, linestyle='--', linewidth=0.5, alpha=0.30)
+
+        try:
+            main_ax.set_title(f"{(symbol or 'SYMBOL').upper()} - {timeframe}min", fontsize=12, color='gray', pad=14)
+        except Exception:
+            try:
+                fig.suptitle(f"{(symbol or 'SYMBOL').upper()} - {timeframe}min", fontsize=12, color='gray', alpha=0.6)
+            except Exception:
+                pass
+
+        if fig is not None:
+            try:
+                fig.subplots_adjust(top=0.95, bottom=0.08, left=0.05, right=0.95, hspace=0.2, wspace=0.2)
+            except Exception:
+                pass
+            buf = io.BytesIO()
+            fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight')
+            buf.seek(0)
+            chart_buffers.append(buf)
+
+        try:
+            plt.close(fig)
+        except Exception:
+            pass
+
+    # Try Pillow stacking server-side (Pyodide). If available, append combined image as last buf.
+    combined_buf = None
     try:
-        fig.canvas.draw()
+        if pillow_ok and chart_buffers:
+            from PIL import Image
+            pil_imgs = []
+            for b in chart_buffers:
+                try:
+                    b.seek(0)
+                    pil_imgs.append(Image.open(io.BytesIO(b.getvalue())).convert('RGBA'))
+                except Exception:
+                    continue
+            if pil_imgs:
+                pad = 8
+                max_w = max(img.width for img in pil_imgs)
+                total_h = sum(img.height for img in pil_imgs) + pad * (len(pil_imgs) - 1)
+                # scale combined image to fit plot width if necessary
+                target_w = int(plot_w_px)
+                scale = 1.0
+                if max_w > target_w and target_w > 0:
+                    scale = target_w / float(max_w)
+                    pil_imgs = [img.resize((int(img.width*scale), int(img.height*scale)), resample=Image.LANCZOS) for img in pil_imgs]
+                    max_w = max(img.width for img in pil_imgs)
+                    total_h = sum(img.height for img in pil_imgs) + pad * (len(pil_imgs) - 1)
+                stacked = Image.new('RGBA', (max_w, total_h), (255,255,255,255))
+                y = 0
+                for img in pil_imgs:
+                    x = (max_w - img.width)//2
+                    stacked.paste(img, (x,y), img if img.mode=='RGBA' else None)
+                    y += img.height + pad
+                combined_buf = io.BytesIO(); stacked.save(combined_buf, format='PNG'); combined_buf.seek(0)
+                chart_buffers.append(combined_buf)
+    except Exception:
+        combined_buf = None
+
+    # Create JS Blob URLs for all buffers and return list of URLs
+    urls = []
+    try:
+        for b in chart_buffers:
+            try:
+                arr = js.Uint8Array.new(b.getvalue())
+                blob = js.Blob.new([arr], {"type":"image/png"})
+                url = js.URL.createObjectURL(blob)
+                urls.append(url)
+            except Exception:
+                continue
     except Exception:
         pass
-    plt.show()
-# --------------------------------------------------
-        `);
-        log("Python executed — plot should appear above.");
-      } catch (pyErr) {
-        log("Python error: " + pyErr);
-        console.error(pyErr);
-      } finally {
-        try { pyodide.globals.del("csv_text"); pyodide.globals.del("symbol"); pyodide.globals.del("timeframe"); pyodide.globals.del("plot_w_px"); pyodide.globals.del("plot_h_px"); } catch(e){}
+
+    return urls
+
+# Expose
+globals()['plot_from_csv_many'] = plot_from_csv_many
+</script>
+
+
+<script>
+(async function () {
+  const logEl = document.getElementById('log');
+  const plotTarget = document.getElementById('plot');
+  const symbolInput = document.getElementById('symbol');
+  const tfInput = document.getElementById('timeframe');
+  const loadBtn = document.getElementById('loadBtn');
+  const refreshBtn = document.getElementById('refreshBtn');
+  const fullscreenBtn = document.getElementById('fullscreenBtn');
+
+  function log(msg) { logEl.textContent += msg + '\n'; console.debug(msg); }
+  function clearLog(){ logEl.textContent = ''; }
+
+  // Disable controls until bootstrap finished
+  const controls = [symbolInput, tfInput, loadBtn, refreshBtn, fullscreenBtn];
+  controls.forEach(el => { try { el.disabled = true; } catch(e){} });
+
+  let _lastJobs = null;
+  let _currentImageUrls = [];
+  let isPlotting = false;
+  let plotToken = 0;
+  let lastPlotWidth = 0;
+  let ro;
+
+  // Matplotlib canvas target (kept from your original)
+  document.pyodideMplTarget = plotTarget;
+
+  log('Loading Pyodide (this may take a few seconds):');
+  const pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.0/full/' });
+  log('Pyodide loaded.');
+
+  log('Loading packages: pandas, matplotlib, micropip ...');
+  await pyodide.loadPackage(['pandas', 'matplotlib', 'micropip']);
+  log('Base packages ready (pandas, matplotlib, micropip).');
+
+  // Load embedded chart module (no fetch, avoids CORS)
+  async function loadChartModule() {
+    try {
+      const txt = document.getElementById('chart-src').textContent;
+      if (!txt) throw new Error('embedded chart-src is empty or missing');
+      await pyodide.runPythonAsync(txt);
+      const exists = await pyodide.runPythonAsync("'plot_from_csv_many' in globals()");
+      if (!exists) {
+        log('chart.py loaded but plot_from_csv_many not found in Python globals.');
+        return false;
+      } else {
+        log('chart.py loaded into Pyodide (embedded).');
+        return true;
+      }
+    } catch (err) {
+      log('Failed to load embedded chart.py: ' + err);
+      return false;
+    }
+  }
+
+  // Only enable controls after chart module loads successfully (so the four messages have appeared)
+  const moduleOk = await loadChartModule();
+  if (moduleOk) {
+    // enable controls now that bootstrap sequence finished
+    controls.forEach(el => { try { el.disabled = false; } catch(e){} });
+  } else {
+    // keep disabled, but allow fullscreen (optional)
+    try { fullscreenBtn.disabled = false; } catch(e){}
+  }
+
+  async function fetchCsvText(symbol, timeframe) {
+    const base = 'https://mubinxyz.github.io/front/csv_data';
+    const url = base + '/csv_' + symbol + '_' + timeframe + '.csv';
+    try {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      log('Fetched: ' + url);
+      return await r.text();
+    } catch (err) {
+      log('Fetch failed (' + err + '). Using sample CSV fallback for ' + symbol + '.');
+      return 'Date,Open,High,Low,Close,Volume\\n2025-08-01 00:00:00,56000,56150,55950,56100,120\\n2025-08-01 00:05:00,56100,56250,56000,56050,90\\n2025-08-01 00:10:00,56050,56100,55900,56175,50\\n2025-08-01 00:15:00,56200,56300,56150,56250,75';
+    }
+  }
+
+  function debounce(fn, wait = 250) {
+    let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), wait); };
+  }
+
+  function createDownloadButtons(imgUrl, symbol, timeframe, index, isCombined = false) {
+    const container = document.createElement('div');
+    container.className = 'download-buttons';
+    const pngBtn = document.createElement('button');
+    pngBtn.textContent = 'PNG';
+    pngBtn.onclick = () => {
+      const a = document.createElement('a');
+      a.href = imgUrl;
+      a.download = isCombined ? 'combined_chart.png' : `${symbol}_${timeframe}_chart.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    };
+    container.appendChild(pngBtn);
+    const svgBtn = document.createElement('button');
+    svgBtn.textContent = 'SVG';
+    svgBtn.disabled = true;
+    svgBtn.title = 'SVG export not implemented';
+    container.appendChild(svgBtn);
+    const pdfBtn = document.createElement('button');
+    pdfBtn.textContent = 'PDF';
+    pdfBtn.disabled = true;
+    pdfBtn.title = 'PDF export not implemented';
+    container.appendChild(pdfBtn);
+    return container;
+  }
+
+  // cleanup old blob urls
+  function revokeOldUrls() {
+    try {
+      for (const u of _currentImageUrls) {
+        try { if (u && u.startsWith('blob:')) URL.revokeObjectURL(u); } catch(e) {}
+      }
+    } finally {
+      _currentImageUrls = [];
+    }
+  }
+
+  // fingerprinting (small downscale -> binary string). Helps dedupe identical images even if blobs differ.
+  function fingerprintImage(img) {
+    try {
+      const w = 32, h = 32;
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const data = ctx.getImageData(0, 0, w, h).data;
+      let s = '';
+      // take every 4th pixel brightness to get a compact fingerprint
+      for (let i = 0; i < data.length; i += 16) {
+        const r = data[i], g = data[i+1], b = data[i+2];
+        const v = (r + g + b) / 3;
+        s += (v > 128 ? '1' : '0');
+      }
+      return s;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Main plotting improved: dedupe + detect combined image (server OR choose largest)
+  async function plotCsvMulti(jobs) {
+    const myToken = ++plotToken;
+    if (isPlotting) { log('Plot request ignored: another plot is running.'); return; }
+    isPlotting = true;
+    try {
+      if (ro) ro.disconnect();
+      clearLog(); log('Preparing plot(s)...');
+      _lastJobs = jobs;
+      revokeOldUrls();
+
+      const w = Math.max(300, plotTarget.clientWidth - 32);
+      const h = Math.max(220, Math.round(w * 0.55));
+      lastPlotWidth = w;
+
+      pyodide.globals.set('jobs', jobs);
+      pyodide.globals.set('plot_w_px', w);
+      pyodide.globals.set('plot_h_px', h);
+
+      const urls = await pyodide.runPythonAsync('await plot_from_csv_many(jobs, plot_w_px, plot_h_px)');
+      if (myToken !== plotToken) { log('Stale plot result ignored.'); try { pyodide.globals.del('jobs'); pyodide.globals.del('plot_w_px'); pyodide.globals.del('plot_h_px'); } catch(e){} return; }
+
+      let js_urls = urls;
+      if (urls && typeof urls.toJs === 'function') js_urls = urls.toJs();
+      if (!Array.isArray(js_urls) || js_urls.length === 0) { log('No image URLs returned from Python.'); return; }
+
+      // store for cleanup later
+      _currentImageUrls = js_urls.slice();
+
+      // load all images
+      const imgs = [];
+      for (let u of js_urls) {
+        const img = new Image();
+        img.src = u;
+        img.crossOrigin = 'anonymous';
+        await new Promise((res) => { img.onload = res; img.onerror = res; });
+        imgs.push({ url: u, img });
+      }
+
+      // build fingerprint map to dedupe visually identical images
+      const seen = new Map();
+      const uniqueImgs = [];
+      for (const entry of imgs) {
+        const fp = fingerprintImage(entry.img) || ('u' + Math.random().toString(36).slice(2,8));
+        if (!seen.has(fp)) {
+          seen.set(fp, true);
+          uniqueImgs.push(entry);
+        } else {
+          // revoke duplicate URL immediately
+          try { if (entry.url && entry.url.startsWith('blob:')) URL.revokeObjectURL(entry.url); } catch(e){}
+        }
+      }
+
+      // decide serverCombined: quick heuristic (python appends combined as last buffer when it produced it)
+      const serverCombined = (Array.isArray(js_urls) && jobs && js_urls.length === jobs.length + 1);
+
+      // Determine which images to treat as per-symbol and which as combined
+      let symbolEntries = [];
+      let combinedEntry = null;
+
+      if (serverCombined && uniqueImgs.length >= jobs.length + 1) {
+        // assume last unique is combined
+        symbolEntries = uniqueImgs.slice(0, jobs.length);
+        combinedEntry = uniqueImgs[uniqueImgs.length - 1];
+      } else if (uniqueImgs.length === jobs.length) {
+        symbolEntries = uniqueImgs.slice(0, jobs.length);
+        combinedEntry = null;
+      } else if (uniqueImgs.length > jobs.length) {
+        // no serverCombined flagged but we have more images than symbols: pick largest image as combined
+        // find index of image with greatest naturalHeight * naturalWidth (proxy for combined stacked image)
+        let maxArea = -1, maxIdx = -1;
+        for (let i = 0; i < uniqueImgs.length; i++) {
+          const e = uniqueImgs[i];
+          const area = (e.img.naturalWidth || e.img.width) * (e.img.naturalHeight || e.img.height);
+          if (area > maxArea) { maxArea = area; maxIdx = i; }
+        }
+        if (maxIdx >= 0 && uniqueImgs.length - 1 >= jobs.length) {
+          combinedEntry = uniqueImgs.splice(maxIdx, 1)[0];
+          // now assign first N as symbols
+          symbolEntries = uniqueImgs.slice(0, jobs.length);
+        } else {
+          // fallback: take first N as symbols, no combined
+          symbolEntries = uniqueImgs.slice(0, jobs.length);
+          combinedEntry = null;
+        }
+      } else {
+        // fewer images than symbols — show what we have and no combine
+        symbolEntries = uniqueImgs.slice(0, Math.min(uniqueImgs.length, jobs.length));
+        combinedEntry = null;
+      }
+
+      // clear target and append symbol images in correct order
+      plotTarget.innerHTML = '';
+      for (let i = 0; i < symbolEntries.length; i++) {
+        const entry = symbolEntries[i];
+        const imgContainer = document.createElement('div');
+        imgContainer.className = 'chart-container';
+        imgContainer.appendChild(entry.img);
+        const sym = (i < jobs.length ? jobs[i].symbol : 'unknown');
+        const tf = (i < jobs.length ? jobs[i].timeframe : 'unknown');
+        imgContainer.appendChild(createDownloadButtons(entry.url, sym, tf, i, false));
+        plotTarget.appendChild(imgContainer);
+      }
+
+      if (combinedEntry) {
+        // server-provided combined image (or detected largest)
+        const combinedContainer = document.createElement('div');
+        combinedContainer.className = 'chart-container';
+        combinedEntry.img.style.display = 'block';
+        combinedEntry.img.style.width = '100%';
+        combinedEntry.img.style.height = 'auto';
+        combinedEntry.img.style.marginTop = '12px';
+        combinedContainer.appendChild(combinedEntry.img);
+        combinedContainer.appendChild(createDownloadButtons(combinedEntry.url, 'combined', 'chart', -1, true));
+        plotTarget.appendChild(combinedContainer);
+        log('Server-side combined image used (or detected).');
+      } else {
+        // no server combined image -> create client-side combined image
+        if (symbolEntries.length > 1) {
+          try {
+            const pad = 8;
+            const targetW = Math.max(200, plotTarget.clientWidth - 16);
+            const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+
+            const imgsData = symbolEntries.map(function (entry) {
+              const el = entry.img;
+              return { w: el.naturalWidth || el.width, h: el.naturalHeight || el.height, el: el };
+            });
+            const scaleFactors = imgsData.map(function (it) { return targetW / it.w; });
+            const scaledHeights = imgsData.map(function (it, i) { return Math.round(it.h * scaleFactors[i]); });
+            const totalH = scaledHeights.reduce(function (a, b) { return a + b; }, 0) + pad * (imgsData.length - 1);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.round(targetW * dpr);
+            canvas.height = Math.round(totalH * dpr);
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.scale(dpr, dpr);
+
+            let y = 0;
+            for (let i = 0; i < imgsData.length; i++) {
+              const it = imgsData[i];
+              const sf = scaleFactors[i];
+              const sw = Math.round(it.w * sf);
+              const sh = Math.round(it.h * sf);
+              ctx.drawImage(it.el, Math.round((targetW - sw) / 2), y, sw, sh);
+              y += sh + pad;
+            }
+
+            const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
+            const combinedUrl = URL.createObjectURL(blob);
+            _currentImageUrls.push(combinedUrl);
+
+            const combinedContainer = document.createElement('div');
+            combinedContainer.className = 'chart-container';
+            const combinedImg = new Image();
+            combinedImg.src = combinedUrl;
+            combinedImg.style.display = 'block';
+            combinedImg.style.width = '100%';
+            combinedImg.style.height = 'auto';
+            combinedImg.style.marginTop = '12px';
+            await new Promise((res) => { combinedImg.onload = res; combinedImg.onerror = res; });
+            combinedContainer.appendChild(combinedImg);
+            combinedContainer.appendChild(createDownloadButtons(combinedUrl, 'combined', 'chart', -1, true));
+            plotTarget.appendChild(combinedContainer);
+            log('Client-side combined image appended.');
+          } catch (e) {
+            console.debug('client-side stacking failed', e);
+          }
+        } else {
+          log('Single symbol or no images to combine; skipping combine.');
+        }
+      }
+
+      log('Plot(s) rendered.');
+    } catch (e) {
+      log('Python error: ' + e);
+      console.error(e);
+    } finally {
+      try { pyodide.globals.del('jobs'); pyodide.globals.del('plot_w_px'); pyodide.globals.del('plot_h_px'); } catch (e) {}
+      setTimeout(() => {
+        if (!ro) {
+          const debounced = debounce(function (entries) {
+            for (let e of entries) {
+              const w = document.getElementById('plot').clientWidth;
+              if (_lastJobs && !isPlotting && Math.abs(w - lastPlotWidth) > 40) {
+                plotCsvMulti(_lastJobs);
+              }
+            }
+          }, 300);
+          ro = new ResizeObserver(debounced);
+          ro.observe(document.getElementById('plot'));
+        } else {
+          ro.observe(document.getElementById('plot'));
+        }
+      }, 200);
+      isPlotting = false;
+    }
+  }
+
+  loadBtn.addEventListener('click', async function () {
+    loadBtn.disabled = true; loadBtn.textContent = 'Loading...';
+    const symbolText = (symbolInput.value || '').trim();
+    const tfs = (tfInput.value || '15').trim();
+    if (!symbolText) { log('Please enter at least one symbol'); loadBtn.disabled = false; loadBtn.textContent = 'Load & Plot'; return; }
+    const symbols = [...new Set(symbolText.split(',').map(function (s) { return s.trim(); }).filter(Boolean))];
+    const jobs = [];
+    for (let i = 0; i < symbols.length; i++) {
+      const s = symbols[i];
+      const csvText = await fetchCsvText(s, tfs);
+      jobs.push({ csv_text: csvText, symbol: s, timeframe: tfs });
+    }
+    await plotCsvMulti(jobs);
+    loadBtn.disabled = false; loadBtn.textContent = 'Load & Plot';
+  });
+
+  refreshBtn.addEventListener('click', async function () {
+    if (!_lastJobs) return log('No previous data to redraw.');
+    refreshBtn.disabled = true; refreshBtn.textContent = 'Redrawing...';
+    await plotCsvMulti(_lastJobs);
+    refreshBtn.disabled = false; refreshBtn.textContent = 'Redraw';
+  });
+
+  fullscreenBtn.addEventListener('click', async function () {
+    if (document.fullscreenElement) return document.exitFullscreen();
+    if (document.getElementById('plot').requestFullscreen) await document.getElementById('plot').requestFullscreen();
+  });
+
+  const debounced = debounce(function (entries) {
+    for (let e of entries) {
+      const w = document.getElementById('plot').clientWidth;
+      if (_lastJobs && !isPlotting && Math.abs(w - lastPlotWidth) > 40) {
+        plotCsvMulti(_lastJobs);
       }
     }
+  }, 300);
+  ro = new ResizeObserver(debounced);
+  ro.observe(document.getElementById('plot'));
 
-    // Wire UI
-    loadBtn.addEventListener('click', async () => {
-      loadBtn.disabled = true; loadBtn.textContent = 'Loading...';
-      const symbol = symbolInput.value.trim() || 'btcusd';
-      const timeframe = tfInput.value.trim() || '5';
-      const csvText = await fetchCsvText(symbol, timeframe);
-      await plotCsvWithMplFinance(csvText, symbol, timeframe);
-      loadBtn.disabled = false; loadBtn.textContent = 'Load & Plot';
-    });
+  document.getElementById('initial-skel').style.display = 'none';
+  window.addEventListener('beforeunload', revokeOldUrls);
 
-    refreshBtn.addEventListener('click', async () => {
-      if (!_lastCsv) return log('No previous data to redraw.');
-      refreshBtn.disabled = true; refreshBtn.textContent = 'Redrawing...';
-      await plotCsvWithMplFinance(_lastCsv, _lastSymbol, _lastTf);
-      refreshBtn.disabled = false; refreshBtn.textContent = 'Redraw';
-    });
+})();
+</script>
 
-    fullscreenBtn.addEventListener('click', async () => {
-      if (document.fullscreenElement) return document.exitFullscreen();
-      if (plotTarget.requestFullscreen) await plotTarget.requestFullscreen();
-    });
-
-    // Resize observer — redraw on size changes (debounced)
-    const ro = new ResizeObserver(debounce(entries => {
-      for (let e of entries){
-        // only redraw when we have previous data
-        if (_lastCsv) plotCsvWithMplFinance(_lastCsv, _lastSymbol, _lastTf);
-      }
-    }, 300));
-    ro.observe(plotTarget);
-
-    // initial run
-    const initialCsv = await fetchCsvText(symbolInput.value.trim(), tfInput.value.trim());
-    await plotCsvWithMplFinance(initialCsv, symbolInput.value.trim(), tfInput.value.trim());
-
-  })();
-  </script>
 </body>
 </html>
